@@ -1,0 +1,194 @@
+[
+  {
+    "id": "solar-001",
+    "category": "太阳系",
+    "question": "木星有多少颗卫星？",
+    "required_keywords": ["木星", "卫星"],
+    "preferred_keywords": ["伽利略", "木卫二", "海洋"],
+    "needs_number": true
+  },
+  {
+    "id": "solar-002",
+    "category": "太阳系",
+    "question": "为什么土星环看起来这么显眼？",
+    "required_keywords": ["土星环", "冰", "颗粒"],
+    "preferred_keywords": ["反射", "宽广"],
+    "needs_number": false
+  },
+  {
+    "id": "solar-003",
+    "category": "太阳系",
+    "question": "火星上现在还有水吗？",
+    "required_keywords": ["火星", "水", "冰"],
+    "preferred_keywords": ["极冠", "地下", "古代"],
+    "needs_number": false
+  },
+  {
+    "id": "solar-004",
+    "category": "太阳系",
+    "question": "金星为什么比水星还热？",
+    "required_keywords": ["金星", "大气", "温室效应"],
+    "preferred_keywords": ["二氧化碳", "热量"],
+    "needs_number": false
+  },
+  {
+    "id": "solar-005",
+    "category": "太阳系",
+    "question": "月球为什么总是同一面对着地球？",
+    "required_keywords": ["月球", "地球", "潮汐锁定"],
+    "preferred_keywords": ["自转", "公转"],
+    "needs_number": false
+  },
+  {
+    "id": "solar-006",
+    "category": "太阳系",
+    "question": "海王星的风为什么这么快？",
+    "required_keywords": ["海王星", "风", "大气"],
+    "preferred_keywords": ["内热", "温差"],
+    "needs_number": false
+  },
+  {
+    "id": "stellar-001",
+    "category": "恒星与演化",
+    "question": "太阳最终会变成什么？",
+    "required_keywords": ["太阳", "红巨星", "白矮星"],
+    "preferred_keywords": ["膨胀", "外层"],
+    "needs_number": false
+  },
+  {
+    "id": "stellar-002",
+    "category": "恒星与演化",
+    "question": "什么是超新星？",
+    "required_keywords": ["超新星", "爆发", "恒星"],
+    "preferred_keywords": ["坍缩", "白矮星"],
+    "needs_number": false
+  },
+  {
+    "id": "stellar-003",
+    "category": "恒星与演化",
+    "question": "中子星为什么这么致密？",
+    "required_keywords": ["中子星", "致密", "引力坍缩"],
+    "preferred_keywords": ["原子核", "中子"],
+    "needs_number": false
+  },
+  {
+    "id": "stellar-004",
+    "category": "恒星与演化",
+    "question": "白矮星和中子星有什么区别？",
+    "required_keywords": ["白矮星", "中子星", "区别"],
+    "preferred_keywords": ["质量", "半径", "密度"],
+    "needs_number": false
+  },
+  {
+    "id": "blackhole-001",
+    "category": "黑洞与高能天体",
+    "question": "黑洞为什么连光都逃不出来？",
+    "required_keywords": ["黑洞", "光", "事件视界"],
+    "preferred_keywords": ["引力", "逃逸"],
+    "needs_number": false
+  },
+  {
+    "id": "blackhole-002",
+    "category": "黑洞与高能天体",
+    "question": "黑洞真的会发光吗？",
+    "required_keywords": ["黑洞", "吸积盘"],
+    "preferred_keywords": ["霍金辐射", "事件视界"],
+    "needs_number": false
+  },
+  {
+    "id": "blackhole-003",
+    "category": "黑洞与高能天体",
+    "question": "银河系中心真的有黑洞吗？",
+    "required_keywords": ["银河系", "中心", "黑洞"],
+    "preferred_keywords": ["人马座A*", "恒星轨道"],
+    "needs_number": false
+  },
+  {
+    "id": "galaxy-001",
+    "category": "星系与宇宙",
+    "question": "银河系有多大？",
+    "required_keywords": ["银河系"],
+    "preferred_keywords": ["光年", "恒星", "盘面"],
+    "needs_number": true
+  },
+  {
+    "id": "galaxy-002",
+    "category": "星系与宇宙",
+    "question": "仙女座星系会撞上银河系吗？",
+    "required_keywords": ["仙女座", "银河系"],
+    "preferred_keywords": ["碰撞", "合并"],
+    "needs_number": false
+  },
+  {
+    "id": "galaxy-003",
+    "category": "星系与宇宙",
+    "question": "宇宙大爆炸指的是什么？",
+    "required_keywords": ["宇宙", "大爆炸"],
+    "preferred_keywords": ["膨胀", "早期宇宙"],
+    "needs_number": false
+  },
+  {
+    "id": "galaxy-004",
+    "category": "星系与宇宙",
+    "question": "宇宙大约多少岁？",
+    "required_keywords": ["宇宙", "年龄"],
+    "preferred_keywords": ["138", "微波背景"],
+    "needs_number": true
+  },
+  {
+    "id": "galaxy-005",
+    "category": "星系与宇宙",
+    "question": "暗物质为什么重要？",
+    "required_keywords": ["暗物质", "引力"],
+    "preferred_keywords": ["星系", "质量分布"],
+    "needs_number": false
+  },
+  {
+    "id": "observation-001",
+    "category": "观测与任务",
+    "question": "哈勃和詹姆斯·韦布望远镜有什么区别？",
+    "required_keywords": ["哈勃", "詹姆斯·韦布", "区别"],
+    "preferred_keywords": ["红外", "可见光", "镜面"],
+    "needs_number": false
+  },
+  {
+    "id": "observation-002",
+    "category": "观测与任务",
+    "question": "为什么射电望远镜能帮助我们研究宇宙？",
+    "required_keywords": ["射电望远镜", "射电波"],
+    "preferred_keywords": ["尘埃", "脉冲星", "星云"],
+    "needs_number": false
+  },
+  {
+    "id": "observation-003",
+    "category": "观测与任务",
+    "question": "引力波是怎么被发现的？",
+    "required_keywords": ["引力波", "激光", "干涉仪"],
+    "preferred_keywords": ["LIGO", "黑洞并合"],
+    "needs_number": false
+  },
+  {
+    "id": "exoplanet-001",
+    "category": "系外行星",
+    "question": "什么是系外行星？",
+    "required_keywords": ["系外行星", "恒星"],
+    "preferred_keywords": ["太阳系外", "轨道"],
+    "needs_number": false
+  },
+  {
+    "id": "exoplanet-002",
+    "category": "系外行星",
+    "question": "科学家通常怎样发现系外行星？",
+    "required_keywords": ["系外行星", "发现"],
+    "preferred_keywords": ["凌星", "径向速度"],
+    "needs_number": false
+  },
+  {
+    "id": "exoplanet-003",
+    "category": "系外行星",
+    "question": "什么样的行星更可能适合生命存在？",
+    "required_keywords": ["生命", "行星"],
+    "preferred_keywords": ["宜居带", "液态水", "大气"],
+    "needs_number": false
+  }
+]

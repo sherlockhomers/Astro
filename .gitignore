@@ -1,0 +1,35 @@
+# Python
+.venv/
+.venv_old_migrated/
+__pycache__/
+*.pyc
+*.pyo
+
+# Node
+node_modules/
+dist/
+
+# Environment
+.env
+.DS_Store
+
+# IDE
+.cursor/
+.codex/
+
+# Logs
+*.log
+logs/
+
+# Database
+*.db
+*.db-shm
+*.db-wal
+
+# Temp
+tmp/
+.tmp/
+.npm-cache/
+
+# OS
+Thumbs.db

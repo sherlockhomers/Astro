@@ -1,0 +1,15 @@
+{
+  "output_root": "D:\\Astro\\data\\high_quality",
+  "arxiv_docs": 500,
+  "apod_docs": 365,
+  "exoplanet_rows": 5000,
+  "clean_corpus_docs": 5865,
+  "fact_rows": 5000,
+  "pdf_downloaded": 80,
+  "generated_at_unix": 1775288875,
+  "sources": [
+    "https://export.arxiv.org/api/query",
+    "https://api.nasa.gov/planetary/apod",
+    "https://exoplanetarchive.ipac.caltech.edu/TAP/sync"
+  ]
+}

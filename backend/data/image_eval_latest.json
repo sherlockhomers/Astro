@@ -1,0 +1,83 @@
+{
+  "summary": {
+    "count": 6,
+    "predict_hits": 6,
+    "search_hits": 6,
+    "qa_hits": 6,
+    "qa_avg_ms": 30.08
+  },
+  "rows": [
+    {
+      "label": "moon",
+      "file": "F:\\astronomical_dataset\\astronomical-image-and-csv-dataset\\data\\images\\test\\celestial objects\\moons\\moon\\moon_1.jpg",
+      "predict_name": "月球",
+      "predict_hit": true,
+      "search_top1": "月球",
+      "search_hit": true,
+      "qa_answer": "这张图里的主体更接近月球。它通常表现为灰白色球体，表面布满陨石坑和月海区域。月球（英语：Moon），地球的天然卫星。",
+      "qa_hit": true,
+      "qa_confidence": "high",
+      "qa_ms": 39.96
+    },
+    {
+      "label": "jupiter",
+      "file": "F:\\astronomical_dataset\\astronomical-image-and-csv-dataset\\data\\images\\test\\celestial objects\\planets\\solar_planets\\jupiter\\jupiter_1.jpg",
+      "predict_name": "木星",
+      "predict_hit": true,
+      "search_top1": "木星",
+      "search_hit": true,
+      "qa_answer": "这张图里的主体更接近木星。它常出现明显的带状云层结构，颜色以浅黄和棕色为主。哈伯太空望远镜的WFC3相机于2014年所拍摄到木星的真实色彩影像，可清楚看见木星南半球的大红斑\n木星（英文：Jupiter），太阳系八大行星中距离太阳排名第五（第五近）的行星，也是太阳系中体积最大的行星，目前已知有79颗卫星。",
+      "qa_hit": true,
+      "qa_confidence": "high",
+      "qa_ms": 32.56
+    },
+    {
+      "label": "supermassive_black_holes",
+      "file": "F:\\astronomical_dataset\\astronomical-image-and-csv-dataset\\data\\images\\test\\celestial objects\\black_holes\\supermassive_black_holes\\supermassive_black_holes_10.png",
+      "predict_name": "恒星级黑洞",
+      "predict_hit": true,
+      "search_top1": "恒星级黑洞",
+      "search_hit": true,
+      "qa_answer": "这张图里的主体更接近黑洞。这类图像常以中心暗区和周围发光吸积盘来表现极强引力环境。黑洞（ black hole ），广义相对论所预言的一种特殊天体。",
+      "qa_hit": true,
+      "qa_confidence": "high",
+      "qa_ms": 30.89
+    },
+    {
+      "label": "spiral_galaxies",
+      "file": "F:\\astronomical_dataset\\astronomical-image-and-csv-dataset\\data\\images\\test\\celestial objects\\galaxies\\spiral_galaxies\\spiral_galaxies_1.jpg",
+      "predict_name": "旋涡星系",
+      "predict_hit": true,
+      "search_top1": "旋涡星系",
+      "search_hit": true,
+      "qa_answer": "这张图里的主体更接近旋涡星系。它通常具有清晰的旋臂结构，恒星和尘埃沿盘面向外盘旋分布。旋涡星系（ spiral galaxy ），具有旋涡结构的盘状星系。",
+      "qa_hit": true,
+      "qa_confidence": "high",
+      "qa_ms": 22.41
+    },
+    {
+      "label": "planetary_nebulae",
+      "file": "F:\\astronomical_dataset\\astronomical-image-and-csv-dataset\\data\\images\\test\\celestial objects\\nebulae\\planetary_nebulae\\planetay_nebulae_1.jpg",
+      "predict_name": "行星状星云",
+      "predict_hit": true,
+      "search_top1": "行星状星云",
+      "search_hit": true,
+      "qa_answer": "这张图里的主体更接近行星状星云。它通常呈环状或壳层状亮斑，是恒星晚期抛射气体形成的星云。行星状星云（汉语拼音：Xingxingzhuang Xingyun；英语：Planetary Nebula），呈圆形或扁圆形，跟大行星很相像的星云。",
+      "qa_hit": true,
+      "qa_confidence": "high",
+      "qa_ms": 19.96
+    },
+    {
+      "label": "comets",
+      "file": "F:\\astronomical_dataset\\astronomical-image-and-csv-dataset\\data\\images\\test\\celestial objects\\asteroids_and_comets\\comets\\comets_1.jpg",
+      "predict_name": "彗星",
+      "predict_hit": true,
+      "search_top1": "彗星",
+      "search_hit": true,
+      "qa_answer": "这张图里的主体更接近彗星。它常有明亮彗核与向外延伸的彗尾，尾部方向受太阳风影响。彗星（comet），太阳系中小天体之一类。",
+      "qa_hit": true,
+      "qa_confidence": "high",
+      "qa_ms": 34.7
+    }
+  ]
+}

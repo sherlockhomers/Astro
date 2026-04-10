@@ -1,0 +1,73 @@
+:root {
+  font-family: "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+  color: #e8ecff;
+  background: #090d1a;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+}
+
+#app {
+  min-height: 100vh;
+  padding: 24px;
+}
+
+.container {
+  max-width: 980px;
+  margin: 0 auto;
+}
+
+.card {
+  background: #121a33;
+  border: 1px solid #233159;
+  border-radius: 12px;
+  padding: 16px;
+  margin-bottom: 16px;
+}
+
+.title {
+  margin: 0 0 8px;
+  font-size: 22px;
+}
+
+.row {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+input,
+textarea,
+button {
+  border-radius: 8px;
+  border: 1px solid #2e4179;
+  background: #0e1530;
+  color: #e8ecff;
+  padding: 10px;
+}
+
+button {
+  cursor: pointer;
+  background: #3056f4;
+  border-color: #3056f4;
+}
+
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+textarea,
+input {
+  width: 100%;
+}
+
+.small {
+  font-size: 13px;
+  opacity: 0.85;
+}

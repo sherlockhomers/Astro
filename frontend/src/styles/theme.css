@@ -1,0 +1,100 @@
+:root {
+  --astro-bg: #090d14;
+  --astro-bg-panel: #111826;
+  --astro-bg-soft: #151f30;
+  --astro-text-main: #e7dfd0;
+  --astro-text-secondary: #b7b0a2;
+  --astro-border: #2a3446;
+  --astro-primary: #b58a4c;
+  --astro-primary-soft: rgba(181, 138, 76, 0.2);
+  --astro-success: #5a9273;
+  --astro-danger: #c96a61;
+}
+
+body {
+  background: radial-gradient(1200px 700px at 30% -10%, #1d2a3f 0%, var(--astro-bg) 45%, #070b12 100%);
+  color: var(--astro-text-main);
+}
+
+#app {
+  min-height: 100vh;
+}
+
+.surface-card {
+  background: linear-gradient(165deg, rgba(20, 28, 42, 0.98), rgba(12, 18, 30, 0.98));
+  border: 1px solid var(--astro-border);
+  border-radius: 10px;
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.2);
+}
+
+.panel-title {
+  margin: 0 0 4px;
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: 0.2px;
+}
+
+.panel-subtitle {
+  margin: 0;
+  color: var(--astro-text-secondary);
+  font-size: 12px;
+}
+
+/* Element Plus theme overrides */
+:root {
+  --el-color-primary: var(--astro-primary);
+  --el-color-primary-light-3: #c29d69;
+  --el-color-primary-light-5: #d0b083;
+  --el-color-primary-light-8: #e4d4b6;
+  --el-color-primary-dark-2: #9e7640;
+
+  --el-color-success: var(--astro-success);
+  --el-color-danger: var(--astro-danger);
+
+  --el-bg-color: var(--astro-bg-soft);
+  --el-bg-color-page: var(--astro-bg);
+  --el-text-color-primary: var(--astro-text-main);
+  --el-text-color-regular: #d3ccbf;
+  --el-text-color-secondary: var(--astro-text-secondary);
+  --el-border-color: var(--astro-border);
+  --el-border-color-light: #334156;
+  --el-fill-color-blank: #121a29;
+}
+
+.el-card {
+  --el-card-bg-color: transparent;
+  border-radius: 10px;
+}
+
+.el-card__header {
+  padding: 12px 14px 10px;
+}
+
+.el-card__body {
+  padding: 12px 14px;
+}
+
+.el-input__wrapper,
+.el-textarea__inner,
+.el-select__wrapper {
+  background: #0f1624 !important;
+  box-shadow: 0 0 0 1px #2f3a4e inset !important;
+}
+
+.el-button {
+  border-radius: 8px;
+  font-weight: 600;
+  padding: 7px 12px;
+}
+
+.el-button--primary {
+  color: #17120a;
+}
+
+.el-form-item {
+  margin-bottom: 12px;
+}
+
+.el-divider {
+  margin: 14px 0;
+}
