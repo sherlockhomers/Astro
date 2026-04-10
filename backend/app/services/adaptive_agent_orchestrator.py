@@ -59,6 +59,39 @@ DOMAIN_FACT_RULES: list[dict[str, Any]] = [
         ),
     },
     {
+        "all_of": ["火星"],
+        "any_of": ["结构", "内部", "核心", "地壳", "构造"],
+        "answer": (
+            "火星的内部结构与地球类似，由三层组成。"
+            "最外层是富含铁氧化物的硅酸盐地壳，厚度约50-125公里，远厚于地球地壳。"
+            "中间是硅酸盐地幔，目前已不再对流。核心是富含铁和硫化铁的金属核，"
+            "半径约1800公里，由于核心已基本冷却凝固，火星几乎没有全球性磁场。"
+            "这种缺失的磁场是火星大气逐渐被太阳风剥蚀的重要原因。"
+            "InSight着陆器的地震数据首次直接探测了火星内部结构，确认了这一分层模型。"
+        ),
+    },
+    {
+        "all_of": ["火星"],
+        "any_of": ["大气", "空气", "大气层", "大气成分"],
+        "answer": (
+            "火星大气极为稀薄，表面气压仅为地球的约0.6%（约610帕斯卡）。"
+            "大气成分以二氧化碳为主（约95.3%），其次是氮气（2.7%）和氩气（1.6%），"
+            "氧气含量极微（约0.13%）。火星大气中还含有少量水蒸气和甲烷。"
+            "由于大气稀薄且缺乏全球磁场保护，火星表面暴露在宇宙辐射下，"
+            "温室效应微弱，导致平均表面温度仅约-63℃。"
+        ),
+    },
+    {
+        "all_of": ["火星"],
+        "any_of": ["温度", "多冷", "多热", "气温"],
+        "answer": (
+            "火星的表面温度变化范围很大：赤道附近白天可达约20℃，夜间降至约-73℃，"
+            "极地冬季可低至约-143℃。平均表面温度约为-63℃。"
+            "这种极端温差主要是因为火星大气极其稀薄（仅地球气压的0.6%），"
+            "无法有效保留热量。此外，火星轨道偏心率较大，使得季节温差也比地球更明显。"
+        ),
+    },
+    {
         "all_of": ["火星", "生命"],
         "any_of": [],
         "answer": (
@@ -272,8 +305,8 @@ class AdaptiveAgentOrchestrator:
         answer_text = ""
         answer_citations: list[str] = []
 
-        direct_answer = self._match_domain_fact_guard(question) if str(strategy.get("complexity", "")) == "simple" else ""
-        if direct_answer and not strategy.get("need_retrieval", False):
+        direct_answer = self._match_domain_fact_guard(question)
+        if direct_answer and str(strategy.get("complexity", "")) in ("simple", "medium") and not strategy.get("need_retrieval", False):
             answer_text = self._polish_user_answer(
                 direct_answer,
                 question,
@@ -378,6 +411,7 @@ class AdaptiveAgentOrchestrator:
                 turns=turns,
             )
             answer_text = self._apply_domain_fact_guards(question, answer_text)
+            answer_text = self._validate_answer_relevance(question, analysis, answer_text)
 
         reflection = self._reflect_answer(question, analysis, answer_text, retrieval_bundle, answer_citations)
         emit(
@@ -449,6 +483,68 @@ class AdaptiveAgentOrchestrator:
             if answer:
                 return answer
         return ""
+
+    def _validate_answer_relevance(self, question: str, analysis: dict[str, Any], answer: str) -> str:
+        """Check that the answer addresses the question's core entities and specific aspect."""
+        q = str(question or "").strip()
+        text = str(answer or "").strip()
+        if not q or not text or len(text) < 10:
+            return text
+
+        entities = [str(e).strip() for e in analysis.get("entities", []) if str(e).strip()]
+
+        corrupted_markers = ["???", "###", "问号", "乱码"]
+        if any(marker in text for marker in corrupted_markers) and len(text) < 50:
+            guarded = self._match_domain_fact_guard(question)
+            if guarded:
+                return guarded
+
+        text_lower = text.lower()
+        if entities:
+            primary_entity = entities[0]
+            if primary_entity.lower() not in text_lower:
+                found = False
+                for e in entities:
+                    if e.lower() in text_lower:
+                        primary_entity = e
+                        found = True
+                        break
+                if not found:
+                    guarded = self._match_domain_fact_guard(question)
+                    if guarded:
+                        return guarded
+                    return f"关于{primary_entity}：{text}"
+
+        aspect_keywords = self._extract_question_aspect(q)
+        if aspect_keywords and not any(kw in text_lower for kw in aspect_keywords):
+            guarded = self._match_domain_fact_guard(question)
+            if guarded:
+                return guarded
+
+        return text
+
+    @staticmethod
+    def _extract_question_aspect(question: str) -> list[str]:
+        """Extract the specific aspect the question is asking about."""
+        q = question.lower()
+        aspect_map = {
+            "结构": ["结构", "内部", "核心", "地壳", "地幔", "构造", "层"],
+            "温度": ["温度", "多热", "多冷", "摄氏", "度"],
+            "大气": ["大气", "气体", "空气", "大气层", "大气压"],
+            "距离": ["距离", "多远", "公里", "光年", "au"],
+            "质量": ["质量", "多重", "多大", "千克", "吨"],
+            "轨道": ["轨道", "公转", "周期", "自转"],
+            "卫星": ["卫星", "月亮", "伴星"],
+            "探测": ["探测", "任务", "着陆", "探测器", "飞船"],
+            "表面": ["表面", "地表", "地形", "山", "平原", "峡谷"],
+            "磁场": ["磁场", "磁层"],
+            "形成": ["形成", "起源", "诞生"],
+            "发现": ["发现", "观测", "历史"],
+        }
+        for aspect, keywords in aspect_map.items():
+            if any(kw in q for kw in keywords):
+                return keywords
+        return []
 
     def _apply_domain_fact_guards(self, question: str, answer: str) -> str:
         q = str(question or "").strip()

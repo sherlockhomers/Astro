@@ -1441,17 +1441,23 @@ class QAService:
         return uuid.uuid4().hex[:12]
 
     @staticmethod
+    @staticmethod
     def _looks_corrupted_answer(answer: str) -> bool:
         text = str(answer or "").strip()
         if not text:
             return True
+        if len(text) < 6:
+            return True
         q_count = text.count("?")
-        if q_count >= 8 and q_count >= int(len(text) * 0.15):
+        if q_count >= 6 and q_count >= int(len(text) * 0.12):
             return True
         if re.search(r"[A-Za-z\u4e00-\u9fff]", text) is None:
             return True
         compact = re.sub(r"\s+", "", text)
-        if len(compact) >= 30 and len(set(compact)) <= 4:
+        if len(compact) >= 20 and len(set(compact)) <= 4:
+            return True
+        repetition_markers = ["??????", "......", "------"]
+        if any(m in text for m in repetition_markers):
             return True
         return False
 

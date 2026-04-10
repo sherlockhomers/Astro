@@ -8,6 +8,7 @@ const running = ref(false);
 const capability = ref<any | null>(null);
 const report = ref<any | null>(null);
 const error = ref("");
+const showAdminPanel = ref(false);
 
 const summaryCards = computed(() => {
   const summary = report.value?.summary || {};
@@ -52,7 +53,7 @@ async function loadPanel() {
     capability.value = capabilityData;
     report.value = reportData;
   } catch (err: any) {
-    error.value = err?.response?.data?.detail || "加载评测面板失败。";
+    error.value = err?.response?.data?.detail || "加载评测面板失败。请确认口令是否正确。";
   } finally {
     loading.value = false;
   }
@@ -88,24 +89,29 @@ onMounted(() => {
     <section class="surface-card panel-shell">
       <div class="hero">
         <div>
-          <p class="eyebrow">比赛答辩材料</p>
-          <h2>问答链路评测与系统指标面板</h2>
+          <p class="eyebrow">系统质量评估</p>
+          <h2>问答链路评测与能力指标</h2>
           <p class="hero-desc">
-            这个页面只用于内部评测、系统自检和答辩展示，不进入普通用户访问路径。
+            基于标准天文科普题集，对系统问答质量进行自动化回归测试。展示准确率、响应速度和各主题覆盖表现。
           </p>
         </div>
 
         <div class="token-box">
-          <el-input
-            v-model="internalToken"
-            placeholder="输入内部评测口令"
-            show-password
-            @keyup.enter="loadPanel"
-          />
-          <div class="token-actions">
-            <el-button :loading="loading" @click="loadPanel">加载面板</el-button>
-            <el-button type="primary" plain :loading="running" @click="handleRun(12)">快速评测</el-button>
-            <el-button type="primary" :loading="running" @click="handleRun(24)">完整评测</el-button>
+          <button class="toggle-admin" @click="showAdminPanel = !showAdminPanel">
+            {{ showAdminPanel ? '收起管理面板' : '管理员操作' }}
+          </button>
+          <div v-if="showAdminPanel" class="admin-panel">
+            <el-input
+              v-model="internalToken"
+              placeholder="输入管理口令"
+              show-password
+              @keyup.enter="loadPanel"
+            />
+            <div class="token-actions">
+              <el-button :loading="loading" @click="loadPanel">加载数据</el-button>
+              <el-button type="primary" plain :loading="running" @click="handleRun(12)">快速评测</el-button>
+              <el-button type="primary" :loading="running" @click="handleRun(24)">完整评测</el-button>
+            </div>
           </div>
         </div>
       </div>
@@ -245,6 +251,33 @@ onMounted(() => {
   margin: 10px 0 0;
   color: var(--text-secondary);
   line-height: 1.8;
+}
+
+.toggle-admin {
+  padding: 6px 14px;
+  border: 1px solid var(--astro-border);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.02);
+  color: var(--text-secondary);
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.12s;
+  align-self: flex-end;
+}
+
+.toggle-admin:hover {
+  border-color: rgba(19, 210, 184, 0.3);
+  color: var(--astro-primary);
+}
+
+.admin-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px;
+  border: 1px solid var(--astro-border);
+  border-radius: 8px;
+  background: rgba(6, 12, 22, 0.5);
 }
 
 .token-box {

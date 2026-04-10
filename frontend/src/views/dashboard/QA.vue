@@ -4,7 +4,7 @@ import { defineAsyncComponent, nextTick, onMounted, onUnmounted, ref, watch } fr
 import { useRoute, useRouter } from "vue-router";
 import { marked } from "marked";
 import { getExploreBundle, saveFavorite, deleteFavorite, streamQuestion, streamQuestionWithImage } from "../../api";
-import { Star, Plus, Copy, RefreshCw, Pencil, Check, X } from "lucide-vue-next";
+import { Star, Plus, Copy, RefreshCw, Pencil, Check, X, Download } from "lucide-vue-next";
 
 const GraphChart = defineAsyncComponent(() => import("../../components/GraphChart.vue"));
 
@@ -501,6 +501,49 @@ function openGraphNode(name: string) {
   openRoute("/app/knowledge", name);
 }
 
+function exportConversation() {
+  if (!messages.value.length) return;
+  const lines: string[] = [
+    "# AstroGraph 问答记录",
+    `导出时间: ${new Date().toLocaleString()}`,
+    `会话 ID: ${sessionId.value || "N/A"}`,
+    "",
+    "---",
+    "",
+  ];
+  for (const msg of messages.value) {
+    if (msg.isTyping) continue;
+    if (msg.role === "user") {
+      lines.push(`## 提问`);
+      lines.push(msg.text);
+      lines.push("");
+    } else {
+      lines.push(`## 回答`);
+      lines.push(msg.text);
+      if (msg.citations?.length) {
+        lines.push("");
+        lines.push("**参考来源:**");
+        for (const cit of msg.citations) {
+          lines.push(`- ${cit}`);
+        }
+      }
+      lines.push("");
+      lines.push("---");
+      lines.push("");
+    }
+  }
+  const blob = new Blob([lines.join("\n")], { type: "text/markdown;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = `astro-qa-${sessionId.value || Date.now()}.md`;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
+  ElMessage.success("对话已导出为 Markdown 文件");
+}
+
 function startNewConversation() {
   messages.value = [];
   sessionId.value = "";
@@ -602,7 +645,11 @@ watch(sessionId, () => {
 
       <div v-else class="conversation-wrap">
         <div class="conversation-toolbar">
-          <button class="new-chat-btn" @click="startNewConversation">
+          <button class="toolbar-btn" @click="exportConversation" title="导出对话">
+            <Download :size="15" />
+            导出
+          </button>
+          <button class="toolbar-btn primary" @click="startNewConversation">
             <Plus :size="15" />
             新建对话
           </button>
@@ -883,11 +930,12 @@ watch(sessionId, () => {
 .conversation-toolbar {
   display: flex;
   justify-content: flex-end;
+  gap: 6px;
   padding: 0 0 10px;
   flex-shrink: 0;
 }
 
-.new-chat-btn {
+.toolbar-btn {
   display: inline-flex;
   align-items: center;
   gap: 5px;
@@ -901,10 +949,15 @@ watch(sessionId, () => {
   transition: all 0.15s;
 }
 
-.new-chat-btn:hover {
+.toolbar-btn:hover {
   border-color: rgba(19, 210, 184, 0.35);
   color: var(--astro-primary);
   background: rgba(19, 210, 184, 0.05);
+}
+
+.toolbar-btn.primary {
+  border-color: rgba(19, 210, 184, 0.25);
+  color: var(--astro-primary);
 }
 
 .conversation {
