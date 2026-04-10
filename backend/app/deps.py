@@ -40,6 +40,9 @@ class ServiceContainer:
         from app.services.user_service import UserService
         from app.services.web_search_service import WebSearchService
 
+        from app.services.cloud_llm_service import CloudLLMService
+
+        self.cloud_llm = CloudLLMService()
         self.data = DataService()
         self.retrieval = RetrievalService(self.data)
         self.graph = GraphService(self.data)

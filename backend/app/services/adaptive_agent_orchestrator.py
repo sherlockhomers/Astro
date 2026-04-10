@@ -17,6 +17,11 @@ from app.services.retrieval_service import RetrievalService
 from app.services.sqlite_service import get_sqlite_connection
 from app.services.web_search_service import WebSearchService
 
+try:
+    from app.services.cloud_llm_service import CloudLLMService
+except ImportError:
+    CloudLLMService = None
+
 EXOPLANET_PATTERNS = (
     r"\b(?:TOI|HD|K2|Kepler|WASP|TRAPPIST|LHS|GJ|Gliese|CoRoT|HIP|KIC)[-\s]?\d+[A-Za-z]?(?:\s*[bcdefg])?\b",
     r"\b[A-Za-z]{2,8}[-\s]?\d{2,7}\s?[bcdefg]\b",
@@ -231,6 +236,12 @@ class AdaptiveAgentOrchestrator:
         self._dynamic = dynamic_service
         self._web = web_service
         self._mcp = mcp_service
+        self._cloud_llm: Any = None
+        if CloudLLMService is not None:
+            try:
+                self._cloud_llm = CloudLLMService()
+            except Exception:
+                self._cloud_llm = None
         self._db_path = settings.sqlite_path
         self._init_db()
         self._domain_fact_rules = self._load_domain_fact_rules()
@@ -413,6 +424,8 @@ class AdaptiveAgentOrchestrator:
             answer_text = self._apply_domain_fact_guards(question, answer_text)
             answer_text = self._validate_answer_relevance(question, analysis, answer_text)
 
+        answer_text = self._cloud_enhance_if_needed(question, answer_text, retrieval_bundle, emit)
+
         reflection = self._reflect_answer(question, analysis, answer_text, retrieval_bundle, answer_citations)
         emit(
             "reflection",
@@ -483,6 +496,51 @@ class AdaptiveAgentOrchestrator:
             if answer:
                 return answer
         return ""
+
+    def _cloud_enhance_if_needed(
+        self,
+        question: str,
+        answer: str,
+        retrieval_bundle: dict[str, Any],
+        emit: Any,
+    ) -> str:
+        """Use cloud LLM to enhance or replace the answer when local quality is low."""
+        if not self._cloud_llm or not self._cloud_llm.enabled:
+            return answer
+
+        text = str(answer or "").strip()
+        should_enhance = False
+
+        if not text or len(text) < 20:
+            should_enhance = True
+        elif text.count("?") >= 5 or text.count("？") >= 3:
+            should_enhance = True
+        elif "知识库中暂" in text or "暂未找到" in text or "没有足够信息" in text:
+            should_enhance = True
+        elif len(text) < 80 and not any(c in text for c in "。！？"):
+            should_enhance = True
+
+        if not should_enhance:
+            return answer
+
+        emit("cloud_enhance", {"message": "正在通过云端模型增强回答质量。"})
+
+        snippets = []
+        for item in (retrieval_bundle.get("rag_items") or [])[:4]:
+            if isinstance(item, dict):
+                snippet = str(item.get("snippet", "")).strip()
+                if snippet:
+                    snippets.append(snippet[:200])
+
+        result = self._cloud_llm.enhance_answer(
+            question=question,
+            local_answer=text if len(text) > 15 else "",
+            context_snippets=snippets if snippets else None,
+        )
+
+        if result.get("ok") and result.get("answer"):
+            return str(result["answer"]).strip()
+        return answer
 
     def _validate_answer_relevance(self, question: str, analysis: dict[str, Any], answer: str) -> str:
         """Check that the answer addresses the question's core entities and specific aspect."""

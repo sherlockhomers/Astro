@@ -188,6 +188,13 @@ class Settings(BaseSettings):
     astro_vision_warmup_delay_seconds: float = 6.0
     clip_warmup_on_startup: bool = True
 
+    cloud_llm_enabled: bool = False
+    cloud_llm_provider: str = "openai"
+    cloud_llm_api_key: str = ""
+    cloud_llm_model: str = "gpt-4o-mini"
+    cloud_llm_timeout_seconds: float = 30.0
+    cloud_llm_max_tokens: int = 800
+
     @property
     def cors_origins(self) -> list[str]:
         return [origin.strip() for origin in self.allowed_origins.split(",") if origin.strip()]
