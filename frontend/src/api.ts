@@ -33,37 +33,55 @@ api.interceptors.request.use((config) => {
   return config;
 });
 
+type ErrorHandler = (message: string, status: number) => void;
+let _globalErrorHandler: ErrorHandler | null = null;
+
+export function setGlobalErrorHandler(handler: ErrorHandler) {
+  _globalErrorHandler = handler;
+}
+
+const AUTH_URLS = ["/api/v1/auth/login", "/api/v1/auth/register", "/api/v1/auth/refresh", "/api/v1/auth/logout"];
+
 api.interceptors.response.use(
   (response) => response,
   async (error) => {
     const originalRequest = error.config || {};
     const status = error?.response?.status;
     const url = String(originalRequest.url || "");
-    const shouldSkip =
-      originalRequest._retry ||
-      status !== 401 ||
-      url.includes("/api/v1/auth/login") ||
-      url.includes("/api/v1/auth/register") ||
-      url.includes("/api/v1/auth/refresh") ||
-      url.includes("/api/v1/auth/logout");
+    const isAuthUrl = AUTH_URLS.some((u) => url.includes(u));
 
-    if (shouldSkip) {
-      throw error;
-    }
-
-    originalRequest._retry = true;
-    try {
-      await ensureSession();
-      const token = getAccessToken();
-      if (token) {
-        originalRequest.headers = originalRequest.headers || {};
-        originalRequest.headers.Authorization = `Bearer ${token}`;
+    if (!originalRequest._retry && status === 401 && !isAuthUrl) {
+      originalRequest._retry = true;
+      try {
+        await ensureSession();
+        const token = getAccessToken();
+        if (token) {
+          originalRequest.headers = originalRequest.headers || {};
+          originalRequest.headers.Authorization = `Bearer ${token}`;
+        }
+        return await api(originalRequest);
+      } catch {
+        setAccessToken(null);
+        throw error;
       }
-      return await api(originalRequest);
-    } catch {
-      setAccessToken(null);
-      throw error;
     }
+
+    if (_globalErrorHandler && !originalRequest._silentError) {
+      const detail = error?.response?.data?.detail || error?.response?.data?.message || "";
+      if (status === 429) {
+        _globalErrorHandler("请求过于频繁，请稍后再试", status);
+      } else if (status === 403) {
+        _globalErrorHandler("没有权限执行此操作", status);
+      } else if (status === 404) {
+        _globalErrorHandler(detail || "请求的资源不存在", status);
+      } else if (status && status >= 500) {
+        _globalErrorHandler(detail || "服务器内部错误，请稍后重试", status);
+      } else if (!error?.response && error?.message) {
+        _globalErrorHandler("网络连接失败，请检查后端服务是否启动", 0);
+      }
+    }
+
+    throw error;
   }
 );
 
