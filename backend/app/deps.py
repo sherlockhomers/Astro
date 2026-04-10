@@ -193,7 +193,8 @@ def optional_user(
 
 
 def require_internal(x_internal_token: str | None = Header(default=None)) -> None:
-    expected = str(getattr(settings, "auth_secret", "") or "").strip()
+    admin_tok = str(getattr(settings, "admin_token", "") or "").strip()
+    expected = admin_tok or str(getattr(settings, "auth_secret", "") or "").strip()
     if not expected or x_internal_token != expected:
         raise HTTPException(status_code=403, detail="Forbidden")
 

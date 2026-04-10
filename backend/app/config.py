@@ -37,11 +37,19 @@ class Settings(BaseSettings):
     @classmethod
     def _warn_weak_auth_secret(cls, v: str) -> str:
         weak = {"change-this-secret", "secret", "password", "changeme", "admin",
-                "ins-ec ure-dev-only-override-in-prod"}
-        if v.lower().replace("-", "").replace("_", "") in weak or len(v) < 32:
+                "insecuredevonlyoverrideinprod"}
+        normalized = v.lower().replace("-", "").replace("_", "")
+        if normalized in weak or len(v) < 32:
+            import os
+            env = os.getenv("APP_ENV", "dev").lower()
+            if env in ("production", "prod", "staging"):
+                raise ValueError(
+                    f"auth_secret is too weak for {env} environment. "
+                    "Generate a strong random secret (≥32 chars) and set it in .env."
+                )
             warnings.warn(
-                f"[Security WARN] auth_secret appears weak or unchanged from default ('{v[:20]}...'). "
-                "Generate a strong random secret (≥32 chars) and set it in .env for production.",
+                f"[Security WARN] auth_secret appears weak ('{v[:20]}...'). "
+                "Generate a strong random secret (≥32 chars) for production.",
                 UserWarning,
             )
         return v
@@ -95,6 +103,10 @@ class Settings(BaseSettings):
     neo4j_uri: str = "bolt://localhost:7687"
     neo4j_user: str = "neo4j"
     sqlite_path: str = "astrograph.db"
+    admin_token: str = Field(
+        default="",
+        description="Separate admin API token. Falls back to auth_secret if empty.",
+    )
     auth_token_expire_hours: int = 72
     auth_access_token_minutes: int = 30
     auth_refresh_token_days: int = 14

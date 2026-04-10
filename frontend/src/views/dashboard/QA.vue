@@ -4,7 +4,7 @@ import { defineAsyncComponent, nextTick, onMounted, onUnmounted, ref, watch } fr
 import { useRoute, useRouter } from "vue-router";
 import { marked } from "marked";
 import { getExploreBundle, saveFavorite, deleteFavorite, streamQuestion, streamQuestionWithImage } from "../../api";
-import { Star } from "lucide-vue-next";
+import { Star, Plus, Copy, RefreshCw, Pencil, Check, X } from "lucide-vue-next";
 
 const GraphChart = defineAsyncComponent(() => import("../../components/GraphChart.vue"));
 
@@ -80,6 +80,7 @@ type ChatMessage = {
   starred?: boolean;
   starId?: number | null;
   starBusy?: boolean;
+  exploreExpanded?: boolean;
 };
 
 type PersistedMessage = {
@@ -170,7 +171,8 @@ function createAssistantPlaceholder(prompt: string): ChatMessage {
     exploreError: "",
     starred: false,
     starId: null,
-    starBusy: false
+    starBusy: false,
+    exploreExpanded: false
   };
   messages.value.push(message);
   return message;
@@ -499,6 +501,54 @@ function openGraphNode(name: string) {
   openRoute("/app/knowledge", name);
 }
 
+function startNewConversation() {
+  messages.value = [];
+  sessionId.value = "";
+  question.value = "";
+  imageFile.value = null;
+  imagePreview.value = "";
+  saveQaState();
+}
+
+async function copyMessageText(msg: ChatMessage) {
+  try {
+    await navigator.clipboard.writeText(msg.text);
+    ElMessage.success("已复制到剪贴板");
+  } catch {
+    ElMessage.error("复制失败");
+  }
+}
+
+function retryMessage(msg: ChatMessage) {
+  const q = msg.role === "user" ? msg.text.replace(/^\[附图\]\s*/, "") : (msg.sourceQuestion || "");
+  if (!q) return;
+  void submitQuestion(q);
+}
+
+const editingIdx = ref<number | null>(null);
+const editText = ref("");
+
+function startEdit(idx: number) {
+  const msg = messages.value[idx];
+  if (!msg || msg.role !== "user") return;
+  editingIdx.value = idx;
+  editText.value = msg.text.replace(/^\[附图\]\s*/, "");
+}
+
+function cancelEdit() {
+  editingIdx.value = null;
+  editText.value = "";
+}
+
+function confirmEdit(idx: number) {
+  const newQ = editText.value.trim();
+  if (!newQ) { cancelEdit(); return; }
+  messages.value = messages.value.slice(0, idx);
+  editingIdx.value = null;
+  editText.value = "";
+  void submitQuestion(newQ);
+}
+
 onMounted(() => {
   restoreQaState();
   loadQuestionFromRoute();
@@ -550,12 +600,32 @@ watch(sessionId, () => {
         </div>
       </div>
 
-      <div v-else ref="conversationRef" class="conversation">
+      <div v-else class="conversation-wrap">
+        <div class="conversation-toolbar">
+          <button class="new-chat-btn" @click="startNewConversation">
+            <Plus :size="15" />
+            新建对话
+          </button>
+        </div>
+        <div ref="conversationRef" class="conversation">
         <div v-for="(msg, idx) in messages" :key="idx" :class="['message-row', msg.role]">
           <div class="avatar">{{ msg.role === 'user' ? '你' : 'ASTRO' }}</div>
           <div class="message-card">
             <div class="message-head">
               <span class="speaker">{{ msg.role === 'user' ? '你的提问' : '科普回答' }}</span>
+              <div class="msg-actions">
+                <button v-if="msg.role === 'user' && editingIdx !== idx" class="msg-action" title="编辑" @click="startEdit(idx)"><Pencil :size="13" /></button>
+                <button class="msg-action" title="复制" @click="copyMessageText(msg)"><Copy :size="13" /></button>
+                <button v-if="msg.role === 'user'" class="msg-action" title="重新提问" @click="retryMessage(msg)"><RefreshCw :size="13" /></button>
+              </div>
+            </div>
+
+            <div v-if="editingIdx === idx" class="edit-area">
+              <el-input v-model="editText" type="textarea" :rows="2" />
+              <div class="edit-btns">
+                <button class="edit-confirm" @click="confirmEdit(idx)"><Check :size="14" /> 确认</button>
+                <button class="edit-cancel" @click="cancelEdit"><X :size="14" /> 取消</button>
+              </div>
             </div>
 
             <div v-if="msg.imagePreview" class="message-image-wrap">
@@ -586,15 +656,16 @@ watch(sessionId, () => {
             </div>
 
             <div v-if="msg.role === 'assistant' && (!msg.isTyping || msg.exploreLoading)" class="explore-panel">
-              <div class="explore-head">
+              <button class="explore-toggle" @click="msg.exploreExpanded = !msg.exploreExpanded">
                 <span class="explore-kicker">延展探索</span>
-                <h3 class="explore-title">{{ msg.explore?.headline || '正在准备相关图像、图谱与 3D 入口' }}</h3>
-                <p class="explore-note">{{ msg.explore?.note || '回答完成后，你可以继续看图像、关系图谱和 3D 模型。' }}</p>
-              </div>
+                <span class="explore-toggle-hint">{{ msg.exploreExpanded ? '收起' : '展开查看图像、图谱与 3D 入口' }}</span>
+                <span :class="['explore-arrow', { open: msg.exploreExpanded }]">▾</span>
+              </button>
 
-              <div v-if="msg.exploreLoading" class="explore-loading">正在补充延展探索内容...</div>
-              <div v-else-if="msg.exploreError" class="explore-loading">{{ msg.exploreError }}</div>
+              <div v-if="msg.exploreLoading && msg.exploreExpanded" class="explore-loading">正在补充延展探索内容...</div>
+              <div v-else-if="msg.exploreError && msg.exploreExpanded" class="explore-loading">{{ msg.exploreError }}</div>
               <template v-else-if="msg.explore">
+                <div v-if="msg.exploreExpanded" class="explore-body">
                 <div v-if="msg.explore.focus_card?.name" class="focus-card">
                   <div class="focus-copy">
                     <div class="focus-meta">
@@ -693,10 +764,12 @@ watch(sessionId, () => {
                     </el-button>
                   </div>
                 </div>
+                </div>
               </template>
             </div>
           </div>
         </div>
+      </div>
       </div>
 
       <div class="composer">
@@ -797,6 +870,41 @@ watch(sessionId, () => {
   justify-content: center;
   gap: 10px;
   max-width: 860px;
+}
+
+.conversation-wrap {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.conversation-toolbar {
+  display: flex;
+  justify-content: flex-end;
+  padding: 0 0 10px;
+  flex-shrink: 0;
+}
+
+.new-chat-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 14px;
+  border: 1px solid var(--astro-border);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.02);
+  color: var(--text-secondary);
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.new-chat-btn:hover {
+  border-color: rgba(19, 210, 184, 0.35);
+  color: var(--astro-primary);
+  background: rgba(19, 210, 184, 0.05);
 }
 
 .conversation {
@@ -923,11 +1031,14 @@ watch(sessionId, () => {
 .explore-panel,
 .focus-card,
 .compare-card,
-.explore-block,
 .action-card,
 .metric-card {
   border: 1px solid var(--astro-border);
   background: rgba(255, 255, 255, 0.02);
+}
+
+.explore-block {
+  min-width: 0;
 }
 
 .stage-wrap,
@@ -978,7 +1089,7 @@ watch(sessionId, () => {
 
 .metric-row { grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); }
 .compare-grid { grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); }
-.explore-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.explore-grid { grid-template-columns: 1fr; }
 .action-row { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 
 .metric-card,
@@ -992,27 +1103,58 @@ watch(sessionId, () => {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 10px;
+  align-items: start;
 }
 
 .image-card {
-  border: 0;
+  border: 1px solid var(--astro-border);
+  border-radius: 10px;
   padding: 0;
-  background: transparent;
+  background: rgba(6, 12, 22, 0.5);
   text-align: left;
   cursor: pointer;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  transition: border-color 0.15s;
+}
+
+.image-card:hover {
+  border-color: rgba(19, 210, 184, 0.3);
 }
 
 .image-thumb {
   width: 100%;
   height: 140px;
-  border-radius: 12px;
-  margin-bottom: 8px;
+  border-radius: 0;
+  display: block;
+}
+
+.image-copy {
+  padding: 8px 10px;
+}
+
+.image-copy strong {
+  display: block;
+  font-size: 13px;
+  color: var(--text-primary);
+}
+
+.image-copy span {
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  font-size: 12px;
+  margin-top: 4px;
+  line-height: 1.5;
 }
 
 .graph-preview {
-  height: 320px;
+  height: 260px;
   overflow: hidden;
-  border-radius: 14px;
+  border-radius: 10px;
+  border: 1px solid var(--astro-border);
 }
 
 .action-card {
@@ -1057,6 +1199,121 @@ watch(sessionId, () => {
 
 @keyframes blink {
   50% { opacity: 0; }
+}
+
+/* Message Actions */
+.msg-actions {
+  display: flex;
+  gap: 2px;
+  opacity: 0;
+  transition: opacity 0.15s;
+  margin-left: auto;
+}
+
+.message-card:hover .msg-actions {
+  opacity: 1;
+}
+
+.msg-action {
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  border: none;
+  background: transparent;
+  color: #4a5e78;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.12s;
+}
+
+.msg-action:hover {
+  color: var(--astro-primary);
+  background: rgba(19, 210, 184, 0.08);
+}
+
+.edit-area {
+  margin: 10px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.edit-btns {
+  display: flex;
+  gap: 8px;
+}
+
+.edit-confirm,
+.edit-cancel {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 12px;
+  border-radius: 6px;
+  border: 1px solid var(--astro-border);
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.12s;
+}
+
+.edit-confirm {
+  background: rgba(19, 210, 184, 0.08);
+  color: var(--astro-primary);
+  border-color: rgba(19, 210, 184, 0.25);
+}
+
+.edit-confirm:hover {
+  background: rgba(19, 210, 184, 0.15);
+}
+
+.edit-cancel {
+  background: transparent;
+  color: var(--text-secondary);
+}
+
+.edit-cancel:hover {
+  color: var(--error-color);
+  border-color: rgba(239, 68, 68, 0.3);
+}
+
+/* Explore Toggle */
+.explore-toggle {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 12px 0;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  text-align: left;
+}
+
+.explore-toggle-hint {
+  flex: 1;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.explore-arrow {
+  font-size: 14px;
+  color: var(--text-secondary);
+  transition: transform 0.2s;
+}
+
+.explore-arrow.open {
+  transform: rotate(180deg);
+}
+
+.explore-body {
+  animation: fadeIn 0.2s ease;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 
 /* Star Icon */

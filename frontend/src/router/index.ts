@@ -1,9 +1,13 @@
 import { createRouter, createWebHistory } from "vue-router";
+import { ElMessage } from "element-plus";
 import { ensureSession } from "../api";
 import Landing from "../views/Landing.vue";
 
 const router = createRouter({
   history: createWebHistory(),
+  scrollBehavior() {
+    return { top: 0 };
+  },
   routes: [
     {
       path: "/",
@@ -67,22 +71,49 @@ const router = createRouter({
           component: () => import("../views/dashboard/Evaluation.vue")
         }
       ]
+    },
+    {
+      path: "/:pathMatch(.*)*",
+      name: "NotFound",
+      redirect: "/"
     }
   ]
 });
 
-router.beforeEach(async (to) => {
+let sessionChecked = false;
+let sessionValid = false;
+
+router.beforeEach(async (to, from) => {
   const requiresAuth = to.matched.some((record) => Boolean(record.meta?.requiresAuth));
   const guestOnly = to.matched.some((record) => Boolean(record.meta?.guestOnly));
 
+  const token = localStorage.getItem("astro_access_token") || localStorage.getItem("astro_token");
+
+  if (!requiresAuth && !guestOnly) {
+    return true;
+  }
+
   let loggedIn = false;
-  try {
-    loggedIn = await ensureSession();
-  } catch {
-    loggedIn = false;
+  if (token) {
+    if (!sessionChecked) {
+      try {
+        loggedIn = await ensureSession();
+        sessionChecked = true;
+        sessionValid = loggedIn;
+      } catch {
+        loggedIn = false;
+        sessionChecked = true;
+        sessionValid = false;
+      }
+    } else {
+      loggedIn = sessionValid;
+    }
   }
 
   if (requiresAuth && !loggedIn) {
+    if (from.name !== "Login" && from.name !== "Register") {
+      ElMessage.warning({ message: "请先登录后再访问", grouping: true });
+    }
     return {
       path: "/login",
       query: { redirect: to.fullPath }
@@ -95,5 +126,10 @@ router.beforeEach(async (to) => {
 
   return true;
 });
+
+export function resetSessionCache() {
+  sessionChecked = false;
+  sessionValid = false;
+}
 
 export default router;

@@ -10,6 +10,13 @@ const ThreeUniverse = defineAsyncComponent(() => import("../components/ThreeUniv
 const NeoWsWidget = defineAsyncComponent(() => import("../components/NeoWsWidget.vue"));
 const AladinPlanetarium = defineAsyncComponent(() => import("../components/AladinPlanetarium.vue"));
 const SolarSystemChart = defineAsyncComponent(() => import("../components/SolarSystemChart.vue"));
+
+const solarVisible = ref(false);
+const aladinVisible = ref(false);
+const solarRef = ref<HTMLElement | null>(null);
+const aladinRef = ref<HTMLElement | null>(null);
+let solarObserver: IntersectionObserver | null = null;
+let aladinObserver: IntersectionObserver | null = null;
 const APOD_FALLBACK_IMAGE = "https://images.unsplash.com/photo-1462331940025-496dfbfc7564?q=80&w=2574&auto=format&fit=crop";
 
 type NewsItem = {
@@ -208,11 +215,29 @@ onMounted(() => {
   refreshTimer = window.setInterval(() => {
     loadLandingData();
   }, 4 * 60 * 1000);
+
+  const observerOptions = { rootMargin: "200px", threshold: 0.01 };
+  solarObserver = new IntersectionObserver(([entry]) => {
+    if (entry.isIntersecting) {
+      solarVisible.value = true;
+      solarObserver?.disconnect();
+    }
+  }, observerOptions);
+  aladinObserver = new IntersectionObserver(([entry]) => {
+    if (entry.isIntersecting) {
+      aladinVisible.value = true;
+      aladinObserver?.disconnect();
+    }
+  }, observerOptions);
+  if (solarRef.value) solarObserver.observe(solarRef.value);
+  if (aladinRef.value) aladinObserver.observe(aladinRef.value);
 });
 
 onUnmounted(() => {
   if (refreshTimer) { window.clearInterval(refreshTimer); refreshTimer = null; }
   if (statsTimer) { window.clearInterval(statsTimer); statsTimer = null; }
+  solarObserver?.disconnect();
+  aladinObserver?.disconnect();
 });
 </script>
 
@@ -231,6 +256,8 @@ onUnmounted(() => {
         <p class="brand-sub">多模态天文科普探索系统</p>
       </div>
       <div class="nav-cta">
+        <el-button text @click="goLogin">登录</el-button>
+        <el-button text @click="goRegister">注册</el-button>
         <el-button type="primary" plain @click="goExplore">进入工作台</el-button>
       </div>
     </nav>
@@ -251,9 +278,6 @@ onUnmounted(() => {
             @keyup.enter="goExploreWithQuestion"
           />
           <el-button type="primary" size="large" @click="goExploreWithQuestion">立即提问</el-button>
-        </div>
-        <div class="hero-actions">
-          <el-button type="primary" size="large" @click="goExplore">开始探索 →</el-button>
         </div>
       </header>
 
@@ -389,13 +413,14 @@ onUnmounted(() => {
       </section>
 
       <!-- Solar System Orbital Visualization -->
-      <section class="solar-section">
+      <section ref="solarRef" class="solar-section">
         <div class="section-head center">
           <span class="section-badge">ORBITAL MECHANICS</span>
           <p class="section-title xl">太阳系实时轨道图</p>
           <p class="section-subtitle">基于真实轨道参数 · 对数缩放坐标系 · 点击行星标签聚焦单一轨道</p>
         </div>
-        <SolarSystemChart />
+        <SolarSystemChart v-if="solarVisible" />
+        <div v-else class="lazy-placeholder">滚动到此处加载轨道图</div>
       </section>
 
       <section class="frontier-section">
@@ -442,13 +467,14 @@ onUnmounted(() => {
           />
         </div>
       </section>
-      <section class="aladin-section">
+      <section ref="aladinRef" class="aladin-section">
         <div class="section-head center">
           <span class="section-badge">ALADIN LITE</span>
           <p class="section-title xl">深空天图探索</p>
           <p class="section-subtitle">由 Centre de Données astronomiques de Strasbourg 提供，支持真实天文巡天数据探索</p>
         </div>
-        <AladinPlanetarium />
+        <AladinPlanetarium v-if="aladinVisible" />
+        <div v-else class="lazy-placeholder">滚动到此处加载天图</div>
       </section>
     </main>
   </div>
@@ -1228,6 +1254,17 @@ h1 {
 .aladin-section {
   width: 100%;
   margin-top: 40px;
+}
+
+.lazy-placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 300px;
+  border: 1px dashed rgba(19, 210, 184, 0.15);
+  color: #3a4e6a;
+  font-size: 13px;
+  font-family: 'Space Mono', monospace;
 }
 
 @media (max-width: 1100px) {

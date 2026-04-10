@@ -92,7 +92,9 @@ function normalizeGraphData(
 function renderChart() {
   if (!chartRef.value) return;
   if (!chart) {
-    chart = echarts.init(chartRef.value, undefined, { renderer: "canvas" });
+    const totalNodes = (props.nodes || []).length;
+    const useWebGL = totalNodes > 500;
+    chart = echarts.init(chartRef.value, undefined, { renderer: useWebGL ? "svg" : "canvas" });
   }
 
   const maxNodes = Math.max(120, Math.min(props.renderLimitNodes || 800, 2200));
