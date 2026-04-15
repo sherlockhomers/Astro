@@ -37,3 +37,7 @@ Thumbs.db
 # Large binary files
 *.pptx
 *.xlsx
+
+# Private docs (defense/evaluation)
+docs/答辩稿.md
+docs/评测数据参考.md
