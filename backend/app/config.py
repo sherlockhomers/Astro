@@ -13,7 +13,7 @@ class Settings(BaseSettings):
 
     # ─── Security-critical fields (require env override in production) ───────────
     auth_secret: str = Field(
-        default="INSECURE-DEV-ONLY-OVERRIDE-IN-PROD",
+        default="",
         description="JWT signing secret — MUST override in production with ≥32 random chars",
     )
     neo4j_password: str = Field(
@@ -36,22 +36,30 @@ class Settings(BaseSettings):
     @field_validator("auth_secret")
     @classmethod
     def _warn_weak_auth_secret(cls, v: str) -> str:
+        import os, secrets
         weak = {"change-this-secret", "secret", "password", "changeme", "admin",
-                "insecuredevonlyoverrideinprod"}
+                "insecuredevonlyoverrideinprod", ""}
         normalized = v.lower().replace("-", "").replace("_", "")
+        env = os.getenv("APP_ENV", "dev").lower()
         if normalized in weak or len(v) < 32:
-            import os
-            env = os.getenv("APP_ENV", "dev").lower()
             if env in ("production", "prod", "staging"):
                 raise ValueError(
                     f"auth_secret is too weak for {env} environment. "
                     "Generate a strong random secret (≥32 chars) and set it in .env."
                 )
-            warnings.warn(
-                f"[Security WARN] auth_secret appears weak ('{v[:20]}...'). "
-                "Generate a strong random secret (≥32 chars) for production.",
-                UserWarning,
-            )
+            if not v or normalized in weak:
+                v = secrets.token_urlsafe(48)
+                warnings.warn(
+                    f"[Security] auth_secret was empty/weak — auto-generated a random "
+                    f"dev secret ({v[:12]}...). Set a permanent secret in .env for production.",
+                    UserWarning,
+                )
+            else:
+                warnings.warn(
+                    f"[Security WARN] auth_secret appears weak ('{v[:20]}...'). "
+                    "Generate a strong random secret (≥32 chars) for production.",
+                    UserWarning,
+                )
         return v
 
     @field_validator("neo4j_password")

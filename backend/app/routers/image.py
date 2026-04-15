@@ -110,7 +110,10 @@ def image_file(image_id: str, svc: ServiceContainer = Depends(get_services)):
         raise HTTPException(status_code=404, detail="Image reference is empty")
     if image_ref.lower().startswith(("http://", "https://")):
         return RedirectResponse(url=image_ref)
-    file_path = Path(image_ref)
+    file_path = Path(image_ref).resolve()
+    allowed_roots = [Path(d).resolve() for d in settings.image_base_dirs.split(",") if d.strip()] if settings.image_base_dirs else []
+    if allowed_roots and not any(str(file_path).startswith(str(root)) for root in allowed_roots):
+        raise HTTPException(status_code=403, detail="Access to this path is not allowed")
     if not file_path.exists() or not file_path.is_file():
         raise HTTPException(status_code=404, detail="Image file not found")
     if file_path.suffix.lower() not in IMAGE_EXTS:

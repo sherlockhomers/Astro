@@ -135,6 +135,24 @@ async function scrollToBottom() {
   }
 }
 
+let _scrollRafId = 0;
+function throttledScroll() {
+  if (_scrollRafId) return;
+  _scrollRafId = requestAnimationFrame(() => {
+    _scrollRafId = 0;
+    void scrollToBottom();
+  });
+}
+
+let _renderTimer = 0;
+function throttledRender(message: ChatMessage) {
+  if (_renderTimer) return;
+  _renderTimer = window.setTimeout(() => {
+    _renderTimer = 0;
+    updateMessageRender(message);
+  }, 80);
+}
+
 function deriveExploreTopic(prompt: string) {
   const normalized = prompt.trim();
   const known = knownTopics.find((item) => normalized.includes(item));
@@ -356,12 +374,12 @@ async function submitQuestion(overrideQuestion?: string) {
       await streamQuestionWithImage(prompt, file, sessionId.value || undefined, {
         onStatus(payload) {
           recordStage(assistant, String(payload?.message || "正在分析图片并组织回答。"));
-          void scrollToBottom();
+          throttledScroll();
         },
         onDelta(payload) {
           assistant.text += String(payload?.text || "");
-          updateMessageRender(assistant);
-          void scrollToBottom();
+          throttledRender(assistant);
+          throttledScroll();
         },
         onDone(payload) {
           sessionId.value = payload?.session_id ?? sessionId.value;
@@ -389,12 +407,12 @@ async function submitQuestion(overrideQuestion?: string) {
     await streamQuestion(prompt, sessionId.value || undefined, {
       onStatus(payload) {
         recordStage(assistant, String(payload?.message || "正在整理回答。"));
-        void scrollToBottom();
+        throttledScroll();
       },
       onDelta(payload) {
         assistant.text += String(payload?.text || "");
-        updateMessageRender(assistant);
-        void scrollToBottom();
+        throttledRender(assistant);
+        throttledScroll();
       },
       onDone(payload) {
         sessionId.value = payload?.session_id ?? sessionId.value;
@@ -423,6 +441,7 @@ async function submitQuestion(overrideQuestion?: string) {
     assistant.statusText = "";
   } finally {
     asking.value = false;
+    schedulePersist();
   }
 }
 
@@ -603,6 +622,8 @@ onUnmounted(() => {
     window.clearTimeout(persistTimer);
     persistTimer = null;
   }
+  if (_scrollRafId) cancelAnimationFrame(_scrollRafId);
+  if (_renderTimer) clearTimeout(_renderTimer);
   saveQaState();
   previewUrls.forEach((url) => URL.revokeObjectURL(url));
 });
@@ -615,11 +636,10 @@ watch(
 );
 
 watch(
-  messages,
+  () => messages.value.length,
   () => {
     schedulePersist();
-  },
-  { deep: true }
+  }
 );
 
 watch(sessionId, () => {

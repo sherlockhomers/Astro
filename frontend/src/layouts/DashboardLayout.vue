@@ -1,5 +1,5 @@
 ﻿<script setup lang="ts">
-import { onMounted, onUnmounted } from "vue";
+import { onMounted, onUnmounted, onErrorCaptured, ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { logout } from "../api";
 import {
@@ -10,12 +10,34 @@ import {
   User,
   Home,
   Satellite,
-  LogOut
+  LogOut,
+  WifiOff,
+  RefreshCw
 } from "lucide-vue-next";
 
 const router = useRouter();
 const route = useRoute();
 let prefetchHandle: number | null = null;
+const renderError = ref(false);
+const renderErrorMessage = ref("");
+
+onErrorCaptured((err) => {
+  const msg = err instanceof Error ? err.message : String(err);
+  if (msg.includes("Network Error") || msg.includes("ERR_CONNECTION") || msg.includes("fetch")) {
+    renderError.value = true;
+    renderErrorMessage.value = "后端服务暂时不可用，请检查后端是否已启动。";
+  } else {
+    renderError.value = true;
+    renderErrorMessage.value = msg || "页面渲染出现异常，请刷新重试。";
+  }
+  return false;
+});
+
+function retryConnection() {
+  renderError.value = false;
+  renderErrorMessage.value = "";
+  router.go(0);
+}
 
 const navItems = [
   { name: "智能问答", desc: "围绕天文问题进行自然对话与科普讲解", path: "/app/qa", icon: MessageSquare },
@@ -121,9 +143,20 @@ onUnmounted(() => {
 
     <main class="main-content">
       <section class="content-wrapper">
-        <router-view v-slot="{ Component }">
+        <div v-if="renderError" class="error-overlay">
+          <WifiOff :size="48" class="error-icon" />
+          <h2 class="error-title">服务暂时不可用</h2>
+          <p class="error-desc">{{ renderErrorMessage }}</p>
+          <button class="error-retry" @click="retryConnection">
+            <RefreshCw :size="15" />
+            重新连接
+          </button>
+        </div>
+        <router-view v-else v-slot="{ Component }">
           <transition name="fade" mode="out-in">
-            <component :is="Component" />
+            <keep-alive :max="5">
+              <component :is="Component" :key="route.path" />
+            </keep-alive>
           </transition>
         </router-view>
       </section>
@@ -303,6 +336,57 @@ onUnmounted(() => {
   .dashboard-layout {
     grid-template-columns: 280px 1fr;
   }
+}
+
+.error-overlay {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  text-align: center;
+  gap: 12px;
+  padding: 40px;
+}
+
+.error-icon {
+  color: #ef4444;
+  opacity: 0.7;
+}
+
+.error-title {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.error-desc {
+  margin: 0;
+  font-size: 14px;
+  color: var(--text-secondary);
+  max-width: 400px;
+  line-height: 1.6;
+}
+
+.error-retry {
+  margin-top: 8px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 24px;
+  border: 1px solid var(--astro-primary);
+  border-radius: 8px;
+  background: rgba(19, 210, 184, 0.08);
+  color: var(--astro-primary);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.error-retry:hover {
+  background: rgba(19, 210, 184, 0.18);
 }
 
 @media (max-width: 980px) {

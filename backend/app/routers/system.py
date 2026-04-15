@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections import defaultdict
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any
 
 from fastapi import APIRouter, Depends
@@ -44,13 +44,13 @@ def health_ready(svc: ServiceContainer = Depends(get_services)) -> dict:
     from fastapi.responses import JSONResponse
     return JSONResponse(
         status_code=200 if all_healthy else 503,
-        content={"ready": all_healthy, "timestamp": datetime.utcnow().isoformat(), "app": settings.app_name, "env": settings.app_env, "checks": checks},
+        content={"ready": all_healthy, "timestamp": datetime.now(timezone.utc).isoformat(), "app": settings.app_name, "env": settings.app_env, "checks": checks},
     )
 
 
 @router.get("/health/live")
 def health_live() -> dict:
-    return {"alive": True, "timestamp": datetime.utcnow().isoformat()}
+    return {"alive": True, "timestamp": datetime.now(timezone.utc).isoformat()}
 
 
 @router.get("/api/v1/model/status", response_model=ModelStatusResponse)
@@ -133,7 +133,7 @@ def _build_capability_report(svc: ServiceContainer) -> dict:
         recommendations.append("当前后端结构已具备比赛级原型基础，下一步重点应放在评测集与演示脚本固化。")
 
     return {
-        "generated_at": datetime.utcnow().isoformat(),
+        "generated_at": datetime.now(timezone.utc).isoformat(),
         "summary": {
             "app": settings.app_name, "env": settings.app_env, "qa_mode": "adaptive_rag_agent",
             "entity_total": entity_total, "relation_total": relation_total,

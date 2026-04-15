@@ -7,7 +7,7 @@ import json
 import re
 import secrets
 import sqlite3
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from app.config import settings
@@ -15,7 +15,7 @@ from app.services.sqlite_service import get_sqlite_connection
 
 
 def _utcnow() -> datetime:
-    return datetime.utcnow()
+    return datetime.now(timezone.utc).replace(tzinfo=None)
 
 
 class UserService:

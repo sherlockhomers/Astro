@@ -1,4 +1,4 @@
-﻿<script setup lang="ts">
+<script setup lang="ts">
 import { computed, defineAsyncComponent, onMounted, onUnmounted, ref } from "vue";
 import { useRouter } from "vue-router";
 import { celestialBodies } from "../data/celestials";
@@ -11,12 +11,14 @@ const NeoWsWidget = defineAsyncComponent(() => import("../components/NeoWsWidget
 const AladinPlanetarium = defineAsyncComponent(() => import("../components/AladinPlanetarium.vue"));
 const SolarSystemChart = defineAsyncComponent(() => import("../components/SolarSystemChart.vue"));
 
+const universeReady = ref(false);
 const solarVisible = ref(false);
 const aladinVisible = ref(false);
 const solarRef = ref<HTMLElement | null>(null);
 const aladinRef = ref<HTMLElement | null>(null);
 let solarObserver: IntersectionObserver | null = null;
 let aladinObserver: IntersectionObserver | null = null;
+let universeTimer: number | null = null;
 const APOD_FALLBACK_IMAGE = "https://images.unsplash.com/photo-1462331940025-496dfbfc7564?q=80&w=2574&auto=format&fit=crop";
 
 type NewsItem = {
@@ -211,6 +213,7 @@ async function loadLandingData() {
 }
 
 onMounted(() => {
+  universeTimer = window.setTimeout(() => { universeReady.value = true; }, 800);
   loadLandingData();
   refreshTimer = window.setInterval(() => {
     loadLandingData();
@@ -236,6 +239,7 @@ onMounted(() => {
 onUnmounted(() => {
   if (refreshTimer) { window.clearInterval(refreshTimer); refreshTimer = null; }
   if (statsTimer) { window.clearInterval(statsTimer); statsTimer = null; }
+  if (universeTimer) { window.clearTimeout(universeTimer); universeTimer = null; }
   solarObserver?.disconnect();
   aladinObserver?.disconnect();
 });
@@ -248,7 +252,7 @@ onUnmounted(() => {
       backgroundImage: `linear-gradient(rgba(4, 9, 18, 0.72), rgba(4, 9, 18, 0.78)), url(${landingBg})`
     }"
   >
-    <ThreeUniverse />
+    <ThreeUniverse v-if="universeReady" />
     
     <nav class="navbar relative-z">
       <div class="logo">

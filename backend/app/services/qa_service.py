@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import hashlib
 import json
@@ -63,6 +63,7 @@ class QAService:
         )
         self._session_ctx: dict[str, list[str]] = {}
         self._db_path = settings.sqlite_path
+        self._executor = ThreadPoolExecutor(max_workers=2, thread_name_prefix="qa-pool")
         self._answer_cache: OrderedDict[str, dict[str, Any]] = OrderedDict()
         self._cache_hits = 0
         self._cache_misses = 0
@@ -93,15 +94,12 @@ class QAService:
         if timeout_sec <= 0:
             return self.ask_detailed(question, session_id, emit_stage=emit_stage)
 
-        pool = ThreadPoolExecutor(max_workers=1)
-        future = pool.submit(self.ask_detailed, question, session_id, emit_stage)
+        future = self._executor.submit(self.ask_detailed, question, session_id, emit_stage)
         try:
             return future.result(timeout=timeout_sec)
         except FuturesTimeoutError as exc:
             future.cancel()
             raise TimeoutError(f"QA pipeline exceeded {timeout_sec:.1f}s") from exc
-        finally:
-            pool.shutdown(wait=False, cancel_futures=True)
 
     def ask_detailed(
         self,
@@ -228,15 +226,12 @@ class QAService:
         if timeout_sec <= 0:
             return self.ask_with_image_detailed(question, image_bytes, filename, session_id)
 
-        pool = ThreadPoolExecutor(max_workers=1)
-        future = pool.submit(self.ask_with_image_detailed, question, image_bytes, filename, session_id)
+        future = self._executor.submit(self.ask_with_image_detailed, question, image_bytes, filename, session_id)
         try:
             return future.result(timeout=timeout_sec)
         except FuturesTimeoutError as exc:
             future.cancel()
             raise TimeoutError(f"Image QA pipeline exceeded {timeout_sec:.1f}s") from exc
-        finally:
-            pool.shutdown(wait=False, cancel_futures=True)
 
     def build_image_preview(self, question: str, image_bytes: bytes, filename: str) -> dict[str, Any]:
         prediction = self._image_service.predict(filename, image_bytes) if self._image_service else {"ok": False}
@@ -904,15 +899,12 @@ class QAService:
         context: dict[str, Any],
         timeout_sec: float,
     ) -> tuple[bool, dict[str, Any] | str]:
-        pool = ThreadPoolExecutor(max_workers=1)
-        future = pool.submit(self._model_service.answer, question, context)
+        future = self._executor.submit(self._model_service.answer, question, context)
         try:
             return future.result(timeout=max(6.0, float(timeout_sec)))
         except Exception:
             future.cancel()
             return False, ""
-        finally:
-            pool.shutdown(wait=False, cancel_futures=True)
 
     def _extract_model_output(self, result: dict[str, Any] | str) -> tuple[str, list[str]]:
         if isinstance(result, dict):
@@ -1440,7 +1432,6 @@ class QAService:
 
         return uuid.uuid4().hex[:12]
 
-    @staticmethod
     @staticmethod
     def _looks_corrupted_answer(answer: str) -> bool:
         text = str(answer or "").strip()

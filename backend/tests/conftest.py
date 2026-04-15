@@ -30,9 +30,9 @@ def tmp_db_path() -> Generator[str, None, None]:
 
 
 @pytest.fixture(scope="session")
-def tmp_csv_root(tmp_path: Path) -> Path:
-    """Provide a temporary directory simulating a CSV data root."""
-    csv_root = tmp_path / "csv"
+def tmp_csv_root(tmp_path_factory: pytest.TempPathFactory) -> Path:
+    """Provide a session-scoped temporary directory simulating a CSV data root."""
+    csv_root = tmp_path_factory.mktemp("astro_csv_root") / "csv"
     csv_root.mkdir()
     return csv_root
 
@@ -88,6 +88,36 @@ def data_service_factory(tmp_db_path: str, tmp_csv_root: Path):
             svc._loaded = False
         except Exception:
             pass
+
+
+@pytest.fixture
+def retrieval_service_factory(data_service_factory):
+    """Factory that creates a fresh RetrievalService."""
+    from app.services.retrieval_service import RetrievalService
+
+    def _make() -> RetrievalService:
+        ds = data_service_factory()
+        return RetrievalService(ds)
+
+    yield _make
+
+
+@pytest.fixture
+def qa_service_factory(data_service_factory):
+    """Factory that creates a fresh QAService with minimal dependencies."""
+    from app.services.retrieval_service import RetrievalService
+    from app.services.graph_service import GraphService
+    from app.services.model_service import ModelService
+    from app.services.qa_service import QAService
+
+    def _make() -> QAService:
+        ds = data_service_factory()
+        rs = RetrievalService(ds)
+        gs = GraphService(ds)
+        ms = ModelService()
+        return QAService(ds, rs, gs, ms)
+
+    yield _make
 
 
 @pytest.fixture

@@ -1,4 +1,4 @@
-﻿import axios from "axios";
+import axios from "axios";
 
 const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || "http://localhost:8000").replace(/\/$/, "");
 const ACCESS_TOKEN_KEY = "astro_access_token";
@@ -76,8 +76,11 @@ api.interceptors.response.use(
         _globalErrorHandler(detail || "请求的资源不存在", status);
       } else if (status && status >= 500) {
         _globalErrorHandler(detail || "服务器内部错误，请稍后重试", status);
-      } else if (!error?.response && error?.message) {
-        _globalErrorHandler("网络连接失败，请检查后端服务是否启动", 0);
+      } else if (!error?.response) {
+        const msg = error?.code === "ERR_NETWORK" || error?.code === "ECONNABORTED"
+          ? "后端服务未响应，请确认后端是否已启动"
+          : "网络连接失败，请检查网络状态";
+        _globalErrorHandler(msg, 0);
       }
     }
 

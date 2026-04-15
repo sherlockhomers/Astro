@@ -194,18 +194,6 @@ class AgentService:
             return self._handle_entity_qa(question, entities, intent, analysis)
         return self._handle_search_qa(question, intent, analysis)
 
-    def find_entity_by_name(self, name: str) -> dict[str, Any] | None:
-        target = str(name).strip().lower()
-        if not target:
-            return None
-        for entity in self._data.export_entities():
-            ent_name = str(entity.get("name", "")).strip()
-            if not ent_name:
-                continue
-            if ent_name.lower() == target:
-                return entity
-        return None
-
     def _normalize_question(self, question: str) -> str:
         text = str(question or "").strip()
         text = text.replace("\u3000", " ")
