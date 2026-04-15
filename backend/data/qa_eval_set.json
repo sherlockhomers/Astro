@@ -190,5 +190,102 @@
     "required_keywords": ["生命", "行星"],
     "preferred_keywords": ["宜居带", "液态水", "大气"],
     "needs_number": false
+  },
+  {
+    "id": "fact-001",
+    "category": "事实查询",
+    "question": "火星距离地球多远？",
+    "required_keywords": ["火星", "地球", "距离"],
+    "preferred_keywords": ["AU", "公里", "变化"],
+    "needs_number": true
+  },
+  {
+    "id": "fact-002",
+    "category": "事实查询",
+    "question": "太阳表面温度是多少？",
+    "required_keywords": ["太阳", "温度"],
+    "preferred_keywords": ["5500", "5778", "光球层"],
+    "needs_number": true
+  },
+  {
+    "id": "fact-003",
+    "category": "事实查询",
+    "question": "地球的直径是多少？",
+    "required_keywords": ["地球", "直径"],
+    "preferred_keywords": ["12742", "千米"],
+    "needs_number": true
+  },
+  {
+    "id": "fact-004",
+    "category": "事实查询",
+    "question": "火星的体积有多大？",
+    "required_keywords": ["火星", "体积"],
+    "preferred_keywords": ["地球", "15%"],
+    "needs_number": true
+  },
+  {
+    "id": "fact-005",
+    "category": "事实查询",
+    "question": "太阳系最大的行星是什么？",
+    "required_keywords": ["木星"],
+    "preferred_keywords": ["太阳系", "最大"],
+    "needs_number": false
+  },
+  {
+    "id": "fact-006",
+    "category": "事实查询",
+    "question": "离地球最近的天体是什么？",
+    "required_keywords": ["月球"],
+    "preferred_keywords": ["地球", "最近", "天体"],
+    "needs_number": false
+  },
+  {
+    "id": "solar-007",
+    "category": "太阳系",
+    "question": "火星的内部结构是怎样的？",
+    "required_keywords": ["火星", "地壳", "核心"],
+    "preferred_keywords": ["地幔", "铁", "磁场"],
+    "needs_number": false
+  },
+  {
+    "id": "solar-008",
+    "category": "太阳系",
+    "question": "火星的大气层由什么组成？",
+    "required_keywords": ["火星", "大气", "二氧化碳"],
+    "preferred_keywords": ["稀薄", "气压"],
+    "needs_number": false
+  },
+  {
+    "id": "solar-009",
+    "category": "太阳系",
+    "question": "火星上曾经适合生命存在吗？",
+    "required_keywords": ["火星", "生命"],
+    "preferred_keywords": ["液态水", "古代", "河道"],
+    "needs_number": false
+  },
+  {
+    "id": "blackhole-004",
+    "category": "黑洞与高能天体",
+    "question": "黑洞附近时间真的会变慢吗？",
+    "required_keywords": ["黑洞", "时间"],
+    "preferred_keywords": ["引力", "膨胀", "广义相对论"],
+    "needs_number": false
+  },
+  {
+    "id": "identity-001",
+    "category": "系统测试",
+    "question": "你是谁？你能做什么？",
+    "required_keywords": ["ASTRO"],
+    "preferred_keywords": ["天文", "科普", "助手"],
+    "needs_number": false
+  },
+  {
+    "id": "scope-001",
+    "category": "系统测试",
+    "question": "今天吃什么好？",
+    "required_keywords": ["天文"],
+    "preferred_keywords": ["ASTRO", "科普"],
+    "forbidden_keywords": ["红烧肉", "食谱"],
+    "needs_number": false
   }
 ]

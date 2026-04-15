@@ -33,3 +33,7 @@ tmp/
 
 # OS
 Thumbs.db
+
+# Large binary files
+*.pptx
+*.xlsx
