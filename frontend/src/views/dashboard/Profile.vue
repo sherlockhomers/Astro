@@ -1,7 +1,7 @@
 ﻿<script setup lang="ts">
 import { computed, onMounted, ref } from "vue";
 import { useRouter } from "vue-router";
-import { deleteFavorite, deleteHistoryItem, getUserOverview, logout } from "../../api";
+import { deleteFavorite, deleteHistoryItem, getRecommendPath, getUserOverview, logout } from "../../api";
 import {
   User,
   Clock,
@@ -34,11 +34,26 @@ type Overview = {
   recommended_continue?: Array<{ title: string; query: string; reason: string; path: string }>;
 };
 
+type PathCard = {
+  name: string;
+  seed: string;
+  relation: string;
+  score: number;
+  query: string;
+  reason: string;
+  path: string;
+};
+
 const router = useRouter();
 const loading = ref(false);
 const busyId = ref<number | null>(null);
 const overview = ref<Overview | null>(null);
 const drawerType = ref<"" | "recent" | "favorites" | "recommended">("");
+
+// 「你的下一站」—— 图谱游走算出的推荐；跟上面那个模板式推荐不一样
+const pathCards = ref<PathCard[]>([]);
+const pathSeeds = ref<string[]>([]);
+const pathLoading = ref(false);
 
 const stats = computed(() => overview.value?.stats || {});
 const recentItems = computed(() => overview.value?.recent_explorations || []);
@@ -88,6 +103,24 @@ async function loadOverview() {
   } finally {
     loading.value = false;
   }
+}
+
+async function loadPathCards() {
+  pathLoading.value = true;
+  try {
+    const payload = await getRecommendPath();
+    pathCards.value = Array.isArray(payload?.cards) ? payload.cards : [];
+    pathSeeds.value = Array.isArray(payload?.seeds) ? payload.seeds : [];
+  } catch {
+    pathCards.value = [];
+    pathSeeds.value = [];
+  } finally {
+    pathLoading.value = false;
+  }
+}
+
+function openPathCard(card: PathCard) {
+  router.push({ path: card.path || "/app/qa", query: { q: card.query, auto: "1" } });
 }
 
 function openRoute(path: string, query: string, auto = true) {
@@ -150,6 +183,7 @@ async function signOut() {
 
 onMounted(() => {
   void loadOverview();
+  void loadPathCards();
 });
 </script>
 
@@ -226,6 +260,48 @@ onMounted(() => {
             <strong>{{ stats.history_count || 0 }}</strong>
             <span>问答记录</span>
           </div>
+        </div>
+      </section>
+
+      <!-- 你的下一站 —— 图谱游走推荐 -->
+      <section class="path-section">
+        <div class="section-header">
+          <div class="section-title-group">
+            <Sparkles :size="18" class="section-icon" />
+            <h2>你的下一站</h2>
+          </div>
+          <span class="section-hint">
+            <template v-if="pathSeeds.length">
+              基于「{{ pathSeeds.slice(0, 3).join('、') }}」在知识图谱上找出来的相关话题
+            </template>
+            <template v-else>
+              先问几个问题或收藏几个天体，这里会推荐关联话题
+            </template>
+          </span>
+        </div>
+
+        <div v-if="pathLoading" class="path-loading">正在沿着知识图谱走一遍...</div>
+        <div v-else-if="pathCards.length" class="path-grid">
+          <button
+            v-for="(card, idx) in pathCards"
+            :key="card.name + idx"
+            class="path-card"
+            @click="openPathCard(card)"
+          >
+            <div class="path-card-top">
+              <span class="path-hop">{{ String(idx + 1).padStart(2, '0') }}</span>
+              <span class="path-name">{{ card.name }}</span>
+            </div>
+            <p class="path-reason">{{ card.reason }}</p>
+            <div class="path-card-bottom">
+              <span class="path-query">"{{ card.query }}"</span>
+              <ArrowRight :size="13" class="path-arrow" />
+            </div>
+          </button>
+        </div>
+        <div v-else class="path-empty">
+          <Sparkles :size="28" class="de-icon" />
+          <p>再问几个问题或收藏几个天体，我们就能画出你的下一站</p>
         </div>
       </section>
 
@@ -662,6 +738,111 @@ onMounted(() => {
   display: flex;
   flex-direction: column;
   min-height: 300px;
+}
+
+.path-section {
+  border: 1px solid var(--astro-border);
+  border-top: none;
+  background: rgba(8, 14, 26, 0.6);
+  display: flex;
+  flex-direction: column;
+}
+
+.path-loading,
+.path-empty {
+  padding: 28px 24px;
+  text-align: center;
+  color: var(--text-secondary);
+  font-size: 13px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+
+.path-empty .de-icon {
+  color: #263a5a;
+}
+
+.path-grid {
+  padding: 16px 20px 20px;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: 12px;
+}
+
+.path-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 14px 14px 12px;
+  border: 1px solid var(--astro-border);
+  background: rgba(6, 12, 22, 0.55);
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  border-radius: 2px;
+  transition: border-color 0.15s, background 0.15s, transform 0.15s;
+}
+
+.path-card:hover {
+  border-color: var(--astro-primary);
+  background: rgba(19, 210, 184, 0.06);
+  transform: translateY(-1px);
+}
+
+.path-card-top {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.path-hop {
+  font-size: 11px;
+  color: var(--astro-primary);
+  letter-spacing: 0.6px;
+  padding: 2px 6px;
+  border: 1px solid rgba(19, 210, 184, 0.3);
+  border-radius: 2px;
+  font-variant-numeric: tabular-nums;
+}
+
+.path-name {
+  font-size: 14px;
+  color: var(--text-primary);
+  font-weight: 600;
+  letter-spacing: 0.3px;
+}
+
+.path-reason {
+  margin: 0;
+  font-size: 12px;
+  color: var(--text-secondary);
+  line-height: 1.55;
+  min-height: 34px;
+}
+
+.path-card-bottom {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding-top: 6px;
+  border-top: 1px dashed var(--astro-border);
+}
+
+.path-query {
+  font-size: 11.5px;
+  color: var(--text-secondary);
+  font-style: italic;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.path-arrow {
+  color: var(--astro-primary);
+  flex-shrink: 0;
 }
 
 .section-header {

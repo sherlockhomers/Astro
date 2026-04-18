@@ -1,5 +1,11 @@
 import { defineStore } from "pinia";
-import { getGraphStatus, getLandingApod, getLandingFrontier, getLandingNews } from "../api";
+import {
+  getGraphStatus,
+  getLandingAlerts,
+  getLandingApod,
+  getLandingFrontier,
+  getLandingNews
+} from "../api";
 
 // Landing 每次进来都要拉 3~4 个接口，在知识卡片和首页之间反复横跳会明显卡。
 // 存一份上次的结果，回来的时候先渲染老数据，够新就不刷、旧了才悄悄刷。
@@ -33,10 +39,22 @@ type FrontierTopic = {
   items: FrontierPaper[];
 };
 
+type SpaceAlert = {
+  id: string;
+  title: string;
+  summary: string;
+  source: string;
+  severity: "alert" | "notable" | "info";
+  happens_at: string;
+  url?: string | null;
+  extra?: Record<string, unknown>;
+};
+
 type LandingState = {
   apod: any | null;
   news: NewsItem[];
   frontierTopics: FrontierTopic[];
+  alerts: SpaceAlert[];
   graphNodes: number;
   fetchedAt: number;
   refreshing: boolean;
@@ -48,6 +66,7 @@ export const useLandingStore = defineStore("landing", {
     apod: null,
     news: [],
     frontierTopics: [],
+    alerts: [],
     graphNodes: 0,
     fetchedAt: 0,
     refreshing: false,
@@ -92,10 +111,11 @@ export const useLandingStore = defineStore("landing", {
     },
 
     async _doFetch(): Promise<void> {
-      const [apod, newsRes, frontierRes] = await Promise.all([
+      const [apod, newsRes, frontierRes, alertRes] = await Promise.all([
         getLandingApod().catch(() => null),
         getLandingNews(6).catch(() => ({ items: [] })),
-        getLandingFrontier(36).catch(() => ({ topics: [] }))
+        getLandingFrontier(36).catch(() => ({ topics: [] })),
+        getLandingAlerts(6).catch(() => ({ events: [] }))
       ]);
 
       // apod 这一项：新的拿到了就换；新的挂了、老的还在，就别把老的洗掉
@@ -118,6 +138,11 @@ export const useLandingStore = defineStore("landing", {
       }));
       if (normalized.length || !this.frontierTopics.length) {
         this.frontierTopics = normalized;
+      }
+
+      const incomingAlerts = Array.isArray(alertRes?.events) ? (alertRes.events as SpaceAlert[]) : [];
+      if (incomingAlerts.length || !this.alerts.length) {
+        this.alerts = incomingAlerts;
       }
 
       // 图谱状态是另一个接口，挂了上面三样数据该展示还是展示

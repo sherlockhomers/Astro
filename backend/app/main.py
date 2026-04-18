@@ -20,7 +20,19 @@ from app.config import settings
 from app.deps import lifespan
 from app.metrics import register_metrics
 
-from app.routers import auth, qa, data, graph, visualization, image, user, system, landing, admin
+from app.routers import (
+    admin,
+    astro_tools,
+    auth,
+    data,
+    graph,
+    image,
+    landing,
+    qa,
+    system,
+    user,
+    visualization,
+)
 
 app = FastAPI(title=settings.app_name, version="0.2.0", lifespan=lifespan)
 logger = logging.getLogger("astrograph")
@@ -129,3 +141,4 @@ app.include_router(image.router)
 app.include_router(user.router)
 app.include_router(landing.router)
 app.include_router(admin.router)
+app.include_router(astro_tools.router)

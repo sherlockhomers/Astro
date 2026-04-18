@@ -37,6 +37,7 @@ class ServiceContainer:
         from app.services.model_service import ModelService
         from app.services.qa_service import QAService
         from app.services.retrieval_service import RetrievalService
+        from app.services.space_events_service import SpaceEventsService
         from app.services.user_service import UserService
         from app.services.web_search_service import WebSearchService
 
@@ -44,6 +45,7 @@ class ServiceContainer:
 
         self.cloud_llm = CloudLLMService()
         self.data = DataService()
+        self.space_events = SpaceEventsService()
         self.retrieval = RetrievalService(self.data)
         self.graph = GraphService(self.data)
         self.model = ModelService()

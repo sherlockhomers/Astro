@@ -65,6 +65,8 @@ tmp/
 .tmp/
 .npm-cache/
 backend/tmp/
+.tmp_*
+*.bak
 
 # OS
 Thumbs.db

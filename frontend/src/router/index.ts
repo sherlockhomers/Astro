@@ -69,6 +69,11 @@ const router = createRouter({
           path: "evaluation",
           name: "Evaluation",
           component: () => import("../views/dashboard/Evaluation.vue")
+        },
+        {
+          path: "tools",
+          name: "AstroTools",
+          component: () => import("../views/dashboard/AstroTools.vue")
         }
       ]
     },

@@ -175,6 +175,50 @@ export async function getLandingFrontier(perTopic = 36) {
   return data;
 }
 
+// 天文快讯聚合：近地小行星 + GCN 瞬变源
+export async function getLandingAlerts(limit = 6) {
+  const { data } = await api.get("/api/v1/landing/alerts", { params: { limit } });
+  return data;
+}
+
+// ── 天文计算工具（创新 D）────────────────────────────
+export async function getAstroToolCatalog() {
+  const { data } = await api.get("/api/v1/astro-tools/catalog");
+  return data;
+}
+
+export async function callMoonPhase(date?: string) {
+  const { data } = await api.post("/api/v1/astro-tools/moon-phase", { date: date || null });
+  return data;
+}
+
+export async function callPlanetVisibility(params: {
+  planet: string;
+  city?: string;
+  latitude?: number;
+  longitude?: number;
+  datetime_iso?: string;
+}) {
+  const { data } = await api.post("/api/v1/astro-tools/planet-visibility", params);
+  return data;
+}
+
+export async function callCoordConvert(params: {
+  ra: number;
+  dec: number;
+  from_frame: "equatorial" | "ecliptic";
+  to_frame: "equatorial" | "ecliptic";
+}) {
+  const { data } = await api.post("/api/v1/astro-tools/coord-convert", params);
+  return data;
+}
+
+// ── 个性化推荐路径（创新 F）────────────────────────
+export async function getRecommendPath() {
+  const { data } = await api.get("/api/v1/user/recommend-path");
+  return data;
+}
+
 export async function updateProfile(username: string) {
   const { data } = await api.patch("/api/v1/auth/profile", { username });
   return data;

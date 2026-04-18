@@ -12,7 +12,8 @@ import {
   Satellite,
   LogOut,
   WifiOff,
-  RefreshCw
+  RefreshCw,
+  Calculator
 } from "lucide-vue-next";
 
 const router = useRouter();
@@ -44,6 +45,7 @@ const navItems = [
   { name: "图像检索", desc: "支持以文搜图和以图搜图", path: "/app/image-search", icon: ImageIcon },
   { name: "知识探索", desc: "查看实体关系、路径发现与图谱子图", path: "/app/knowledge", icon: Network },
   { name: "3D 可视化星图", desc: "查询并观察常见天体的三维模型", path: "/app/starfield", icon: Globe2 },
+  { name: "天文计算", desc: "月相 / 行星可见性 / 坐标转换", path: "/app/tools", icon: Calculator },
   { name: "个人中心", desc: "查看账号信息、收藏和探索记录", path: "/app/profile", icon: User }
 ];
 

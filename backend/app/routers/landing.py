@@ -27,3 +27,9 @@ def landing_science_cards(limit: int = 8, svc: ServiceContainer = Depends(get_se
 @router.get("/frontier")
 def landing_frontier(per_topic: int = 36, svc: ServiceContainer = Depends(get_services)) -> dict:
     return svc.landing.get_frontier(per_topic=per_topic)
+
+
+@router.get("/alerts")
+def landing_alerts(limit: int = 6, svc: ServiceContainer = Depends(get_services)) -> dict:
+    # 天文快讯聚合：近地小行星 + 高能瞬变源。首页 banner 用的
+    return svc.space_events.get_events(limit=limit)

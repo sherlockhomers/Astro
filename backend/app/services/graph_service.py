@@ -860,6 +860,84 @@ class GraphService:
         self._adjacency = adjacency
         return adjacency
 
+    def recommend_by_walk(
+        self,
+        seeds: list[str],
+        *,
+        walks_per_seed: int = 12,
+        steps: int = 3,
+        top_k: int = 6,
+    ) -> list[dict[str, Any]]:
+        # 从种子节点出发做多次短随机游走，统计邻居被走到的次数。
+        # 走得多的节点通常跟种子关系紧密，拿来当推荐很合适。
+        # 比瞎用模板靠谱多了 —— 节点关系本来就是用户兴趣图谱的真实反映。
+        import random
+        from collections import Counter, defaultdict
+
+        if not seeds:
+            return []
+
+        adjacency = self._build_adjacency()
+        if not adjacency:
+            return []
+
+        resolved_seeds: list[str] = []
+        for raw in seeds:
+            name = self._resolve_entity_name(raw)
+            if name and name in adjacency and name not in resolved_seeds:
+                resolved_seeds.append(name)
+        if not resolved_seeds:
+            return []
+
+        seed_set = set(resolved_seeds)
+        visit_count: Counter[str] = Counter()
+        reached_via: defaultdict[str, list[tuple[str, str]]] = defaultdict(list)
+        rng = random.Random(hash(tuple(sorted(resolved_seeds))) & 0xFFFFFFFF)
+
+        for seed in resolved_seeds:
+            for _ in range(walks_per_seed):
+                cur = seed
+                path_relation: str | None = None
+                for _ in range(steps):
+                    neighbors = adjacency.get(cur, [])
+                    if not neighbors:
+                        break
+                    # 先试着挑非反向边，让推荐更"正向"一些
+                    forward = [(n, r) for n, r in neighbors if not r.startswith("REVERSE_")]
+                    pool = forward or neighbors
+                    nxt, rel = rng.choice(pool)
+                    cur = nxt
+                    if path_relation is None:
+                        path_relation = rel
+                    if nxt in seed_set:
+                        continue
+                    visit_count[nxt] += 1
+                    reached_via[nxt].append((seed, rel))
+
+        # 按 visit_count 降序，排除种子本身
+        ranked: list[tuple[str, int]] = [
+            (name, count) for name, count in visit_count.most_common()
+            if name not in seed_set
+        ]
+        ranked = ranked[: max(1, top_k)]
+
+        results: list[dict[str, Any]] = []
+        for name, count in ranked:
+            via_pairs = reached_via.get(name, [])
+            seed_hit = via_pairs[0][0] if via_pairs else ""
+            rel_hit = via_pairs[0][1] if via_pairs else ""
+            # 把反向关系标记去掉显示得干净一点
+            clean_rel = rel_hit.replace("REVERSE_", "")
+            results.append(
+                {
+                    "name": name,
+                    "seed": seed_hit,
+                    "relation": clean_rel,
+                    "hits": count,
+                }
+            )
+        return results
+
     def _resolve_entity_name(self, name: str) -> str:
         raw = str(name or "").strip()
         if not raw:

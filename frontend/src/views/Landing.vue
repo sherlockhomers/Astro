@@ -62,7 +62,24 @@ const exploreInput = ref("木星为什么会有这么多卫星？");
 
 // 切到别的页面再回来的时候，这些数据从 store 里直接取，不用干等接口
 const landingStore = useLandingStore();
-const { apod: apodData, news: newsItems, frontierTopics, refreshing } = storeToRefs(landingStore);
+const { apod: apodData, news: newsItems, frontierTopics, alerts, refreshing } = storeToRefs(landingStore);
+
+// 用户手动关过的 alert 就不再显示。只在本次会话内生效，刷新会重置
+const dismissedAlertIds = ref(new Set<string>());
+const visibleAlert = computed(() => {
+  const list = alerts.value || [];
+  return list.find((a) => !dismissedAlertIds.value.has(a.id)) || null;
+});
+
+function dismissAlert(id: string) {
+  dismissedAlertIds.value = new Set([...dismissedAlertIds.value, id]);
+}
+
+function alertSeverityLabel(sev: string) {
+  if (sev === "alert") return "⚠ 警报";
+  if (sev === "notable") return "◆ 关注";
+  return "· 资讯";
+}
 
 const scienceCards = ref<ScienceCard[]>([]);
 
@@ -277,6 +294,29 @@ onUnmounted(() => {
         <el-button type="primary" plain @click="goExplore">进入工作台</el-button>
       </div>
     </nav>
+
+    <!-- 天文快讯 banner，数据来自 /api/v1/landing/alerts，聚合 NeoWs 和 GCN -->
+    <transition name="alert-fade">
+      <a
+        v-if="visibleAlert"
+        class="alert-banner relative-z"
+        :class="['sev-' + visibleAlert.severity]"
+        :href="visibleAlert.url || '#'"
+        :target="visibleAlert.url ? '_blank' : '_self'"
+        :rel="visibleAlert.url ? 'noopener noreferrer' : undefined"
+      >
+        <span class="alert-tag">{{ alertSeverityLabel(visibleAlert.severity) }}</span>
+        <span class="alert-source">{{ visibleAlert.source }}</span>
+        <span class="alert-title">{{ visibleAlert.title }}</span>
+        <span class="alert-summary">{{ visibleAlert.summary }}</span>
+        <button
+          class="alert-dismiss"
+          type="button"
+          aria-label="关闭"
+          @click.prevent.stop="dismissAlert(visibleAlert.id)"
+        >×</button>
+      </a>
+    </transition>
 
     <main class="main-content relative-z">
       <header class="hero">
@@ -543,6 +583,123 @@ onUnmounted(() => {
   justify-content: space-between;
   align-items: center;
   padding: 8px 4px;
+}
+
+.alert-banner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 6px 0 0;
+  padding: 9px 14px;
+  text-decoration: none;
+  border: 1px solid rgba(239, 68, 68, 0.35);
+  background: linear-gradient(90deg, rgba(239, 68, 68, 0.12), rgba(239, 68, 68, 0.05) 60%, transparent);
+  color: var(--text-primary);
+  font-size: 12.5px;
+  line-height: 1.4;
+  border-radius: 2px;
+  transition: border-color 0.15s;
+}
+
+.alert-banner:hover {
+  border-color: rgba(239, 68, 68, 0.6);
+}
+
+.alert-banner.sev-notable {
+  border-color: rgba(245, 158, 11, 0.35);
+  background: linear-gradient(90deg, rgba(245, 158, 11, 0.1), rgba(245, 158, 11, 0.03) 60%, transparent);
+}
+
+.alert-banner.sev-info {
+  border-color: var(--astro-border);
+  background: linear-gradient(90deg, rgba(19, 210, 184, 0.08), transparent 60%);
+}
+
+.alert-tag {
+  flex-shrink: 0;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  font-size: 11px;
+  padding: 2px 7px;
+  border-radius: 2px;
+  background: rgba(239, 68, 68, 0.18);
+  color: #fca5a5;
+}
+
+.sev-notable .alert-tag {
+  background: rgba(245, 158, 11, 0.18);
+  color: #fcd34d;
+}
+
+.sev-info .alert-tag {
+  background: rgba(19, 210, 184, 0.18);
+  color: var(--astro-primary);
+}
+
+.alert-source {
+  flex-shrink: 0;
+  font-size: 10.5px;
+  color: var(--text-secondary);
+  letter-spacing: 0.6px;
+  font-weight: 600;
+}
+
+.alert-title {
+  flex-shrink: 0;
+  font-weight: 600;
+  color: #fff;
+  max-width: 34%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.alert-summary {
+  flex: 1;
+  min-width: 0;
+  color: var(--text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.alert-dismiss {
+  flex-shrink: 0;
+  width: 22px;
+  height: 22px;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+  border-radius: 2px;
+  transition: all 0.12s;
+}
+
+.alert-dismiss:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text-primary);
+}
+
+.alert-fade-enter-active,
+.alert-fade-leave-active {
+  transition: all 0.25s ease;
+}
+
+.alert-fade-enter-from,
+.alert-fade-leave-to {
+  opacity: 0;
+  transform: translateY(-6px);
+}
+
+@media (max-width: 820px) {
+  .alert-title {
+    max-width: none;
+  }
+  .alert-summary {
+    display: none;
+  }
 }
 
 .brand-main {
@@ -1036,61 +1193,83 @@ h1 {
   width: 100%;
   box-sizing: border-box;
   padding: 0 4px;
+  /* 三栏等高对齐 */
+  align-items: stretch;
 }
 
 .frontier-col {
+  display: flex;
+  flex-direction: column;
   border: 1px solid var(--astro-border);
   background: rgba(9, 15, 24, 0.62);
-  padding: 12px;
+  padding: 14px 14px 12px;
   min-height: 360px;
+  border-radius: 2px;
   pointer-events: auto;
 }
 
 .frontier-col-title {
   margin: 0 0 12px;
-  font-size: 17px;
+  font-size: 15px;
+  letter-spacing: 0.3px;
   color: #eef4ff;
+  font-weight: 600;
+  padding-bottom: 10px;
+  border-bottom: 1px dashed var(--astro-border);
+  flex-shrink: 0;
 }
 
 .paper-list {
   display: flex;
   flex-direction: column;
   gap: 10px;
+  flex: 1;
+  min-height: 0;
 }
 
 .paper-item {
-  display: block;
-  border: 1px solid #2a3a55;
-  border-radius: 10px;
-  padding: 11px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  border: 1px solid #1f2c44;
+  border-radius: 2px;
+  padding: 10px 11px;
   text-decoration: none;
   background: rgba(8, 14, 26, 0.65);
+  transition: border-color 0.15s, background 0.15s;
 }
 
 .paper-item:hover {
-  border-color: #d0a96c;
-  background: rgba(181, 138, 76, 0.1);
+  border-color: rgba(19, 210, 184, 0.55);
+  background: rgba(19, 210, 184, 0.05);
 }
 
 .paper-title {
   margin: 0;
   color: #edf3ff;
-  font-size: 14px;
+  font-size: 13.5px;
   line-height: 1.45;
+  font-weight: 500;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 
 .paper-meta {
-  margin: 6px 0 0;
+  margin: 2px 0 0;
   display: flex;
   justify-content: space-between;
   color: #9eb0ca;
-  font-size: 12px;
+  font-size: 11px;
+  letter-spacing: 0.3px;
 }
 
 .paper-authors {
-  margin: 4px 0 0;
+  margin: 0;
   font-size: 11px;
-  color: #4a6080;
+  color: #5e7594;
   font-family: 'Space Mono', monospace;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1098,10 +1277,10 @@ h1 {
 }
 
 .paper-summary {
-  margin: 8px 0 0;
+  margin: 2px 0 0;
   color: #aab9d0;
-  font-size: 12px;
-  line-height: 1.5;
+  font-size: 11.5px;
+  line-height: 1.55;
   display: -webkit-box;
   -webkit-line-clamp: 2;
   line-clamp: 2;
@@ -1110,9 +1289,16 @@ h1 {
 }
 
 .paper-empty {
-  color: #8fa2be;
-  font-size: 13px;
-  padding-top: 12px;
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #5e7594;
+  font-size: 12px;
+  letter-spacing: 0.5px;
+  border: 1px dashed var(--astro-border);
+  border-radius: 2px;
+  padding: 18px;
 }
 
 .frontier-pagination {
