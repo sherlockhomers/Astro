@@ -703,6 +703,24 @@ watch(sessionId, () => {
             <div class="message-text markdown-body" v-html="msg.html"></div>
             <span v-if="msg.isTyping" class="cursor-blink">|</span>
 
+            <!-- 流式阶段提示：让用户看到"系统在做什么"，不是空等 -->
+            <div
+              v-if="msg.isTyping && (msg.statusText || (msg.stageTrail && msg.stageTrail.length))"
+              class="typing-stages"
+            >
+              <div class="stages-current">
+                <span class="stage-dot"></span>
+                <span class="stage-text">{{ msg.statusText || '处理中…' }}</span>
+              </div>
+              <div v-if="msg.stageTrail && msg.stageTrail.length > 1" class="stages-trail">
+                <span
+                  v-for="(step, idx) in msg.stageTrail.slice(0, -1)"
+                  :key="`${step}-${idx}`"
+                  class="stage-step done"
+                >{{ step }}</span>
+              </div>
+            </div>
+
             <div v-if="msg.role === 'assistant' && !msg.isTyping" class="meta-line">
               <el-tag size="small" effect="plain">{{ confidenceLabel(msg.confidence) }}</el-tag>
               <span
@@ -1098,6 +1116,67 @@ watch(sessionId, () => {
   display: inline-block;
   margin-top: 4px;
   animation: blink 1s step-end infinite;
+}
+
+/* 流式阶段面板：让等待不再是"空白的焦虑" */
+.typing-stages {
+  margin-top: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--astro-border);
+  background: rgba(19, 210, 184, 0.04);
+  border-radius: 2px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.stages-current {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12.5px;
+  color: var(--text-primary);
+}
+
+.stage-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--astro-primary);
+  box-shadow: 0 0 8px rgba(19, 210, 184, 0.6);
+  animation: pulse-dot 1.2s ease-in-out infinite;
+  flex-shrink: 0;
+}
+
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50%      { opacity: 0.5; transform: scale(1.35); }
+}
+
+.stage-text {
+  font-weight: 500;
+  letter-spacing: 0.3px;
+}
+
+.stages-trail {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding-left: 14px;
+}
+
+.stage-step {
+  font-size: 11px;
+  color: var(--text-secondary);
+  padding: 2px 8px;
+  border: 1px solid var(--astro-border);
+  border-radius: 2px;
+  background: rgba(6, 12, 22, 0.4);
+}
+
+.stage-step.done {
+  text-decoration: line-through;
+  opacity: 0.7;
 }
 
 .stage-wrap,
