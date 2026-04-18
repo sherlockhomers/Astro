@@ -1,17 +1,48 @@
 <script setup lang="ts">
 import { ref } from "vue";
 import { ElMessage } from "element-plus";
-import { Calculator, Moon, Telescope, Compass, MapPin, Loader2 } from "lucide-vue-next";
+import { Calculator, Moon, Telescope, Compass, MapPin, Loader2, AlertCircle, Plug } from "lucide-vue-next";
 import {
   callCoordConvert,
   callMoonPhase,
-  callPlanetVisibility
+  callPlanetVisibility,
+  getAstroToolCatalog
 } from "../../api";
 
 type ActiveTool = "moon" | "planet" | "coord";
 
 const activeTool = ref<ActiveTool>("planet");
 const busy = ref(false);
+const lastError = ref<string>("");      // 把后端错误显式显示在面板里，不止靠 toast
+const backendStatus = ref<"unknown" | "ok" | "down">("unknown");
+
+// 后端接口不通最常见：没重启 / 没登录 / 跨域。先给用户一个 one-click 测试
+async function pingBackend() {
+  busy.value = true;
+  lastError.value = "";
+  try {
+    const payload = await getAstroToolCatalog();
+    const n = Array.isArray(payload?.tools) ? payload.tools.length : 0;
+    backendStatus.value = "ok";
+    ElMessage.success(`后端 OK，注册了 ${n} 个工具`);
+  } catch (err: any) {
+    backendStatus.value = "down";
+    lastError.value = formatApiError(err, "/api/v1/astro-tools/catalog");
+  } finally {
+    busy.value = false;
+  }
+}
+
+function formatApiError(err: any, path: string): string {
+  const status = err?.response?.status;
+  const detail = err?.response?.data?.detail;
+  if (status === 404) return `[404] 后端没找到 ${path}，最可能是后端没重启 / 没加载新路由`;
+  if (status === 401 || status === 403) return `[${status}] 没登录或权限不足，请先登录`;
+  if (status === 429) return `[429] 请求太频繁，等一下再试`;
+  if (status && status >= 500) return `[${status}] 后端内部错误：${detail || "查看后端日志"}`;
+  if (!err?.response) return `网络错误：${err?.code || err?.message || "后端是否启动？是否跨域？"}`;
+  return `[${status}] ${detail || err?.message || "未知错误"}`;
+}
 
 // 月相
 const moonDate = ref<string>("");
@@ -35,10 +66,13 @@ const coordResult = ref<Record<string, unknown> | null>(null);
 
 async function runMoon() {
   busy.value = true;
+  lastError.value = "";
   try {
     moonResult.value = await callMoonPhase(moonDate.value || undefined);
-  } catch {
-    ElMessage.error("月相接口请求失败，稍后再试");
+    backendStatus.value = "ok";
+  } catch (err: any) {
+    lastError.value = formatApiError(err, "/api/v1/astro-tools/moon-phase");
+    ElMessage.error(lastError.value);
   } finally {
     busy.value = false;
   }
@@ -46,15 +80,17 @@ async function runMoon() {
 
 async function runPlanet() {
   busy.value = true;
+  lastError.value = "";
   try {
     planetResult.value = await callPlanetVisibility({
       planet: planetName.value,
       city: planetCity.value || undefined,
       datetime_iso: planetDateTime.value || undefined
     });
+    backendStatus.value = "ok";
   } catch (err: any) {
-    const detail = err?.response?.data?.detail || "行星可见性接口请求失败";
-    ElMessage.error(detail);
+    lastError.value = formatApiError(err, "/api/v1/astro-tools/planet-visibility");
+    ElMessage.error(lastError.value);
   } finally {
     busy.value = false;
   }
@@ -66,6 +102,7 @@ async function runCoord() {
     return;
   }
   busy.value = true;
+  lastError.value = "";
   try {
     coordResult.value = await callCoordConvert({
       ra: Number(coordRa.value),
@@ -73,8 +110,10 @@ async function runCoord() {
       from_frame: coordFrom.value,
       to_frame: coordTo.value
     });
-  } catch {
-    ElMessage.error("坐标转换接口请求失败");
+    backendStatus.value = "ok";
+  } catch (err: any) {
+    lastError.value = formatApiError(err, "/api/v1/astro-tools/coord-convert");
+    ElMessage.error(lastError.value);
   } finally {
     busy.value = false;
   }
@@ -112,6 +151,19 @@ function switchTool(t: ActiveTool) {
         <Compass :size="16" />
         <span>坐标转换</span>
       </button>
+      <div class="tabs-spacer"></div>
+      <button class="ping-btn" :disabled="busy" @click="pingBackend" title="测试后端连接">
+        <Plug :size="13" />
+        <span v-if="backendStatus === 'unknown'">测试连接</span>
+        <span v-else-if="backendStatus === 'ok'" class="ping-ok">在线</span>
+        <span v-else class="ping-down">离线</span>
+      </button>
+    </div>
+
+    <div v-if="lastError" class="error-banner">
+      <AlertCircle :size="15" class="err-ico" />
+      <span class="err-text">{{ lastError }}</span>
+      <button class="err-dismiss" @click="lastError = ''">×</button>
     </div>
 
     <!-- 行星可见性 -->
@@ -291,6 +343,74 @@ function switchTool(t: ActiveTool) {
   gap: 8px;
   padding-bottom: 2px;
   border-bottom: 1px solid var(--astro-border);
+  align-items: center;
+}
+
+.tabs-spacer {
+  flex: 1;
+}
+
+.ping-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 10px;
+  border: 1px solid var(--astro-border);
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 11.5px;
+  cursor: pointer;
+  border-radius: 2px;
+  transition: all 0.15s;
+}
+
+.ping-btn:hover {
+  color: var(--text-primary);
+  border-color: rgba(19, 210, 184, 0.4);
+}
+
+.ping-ok {
+  color: var(--success-color);
+  font-weight: 600;
+}
+
+.ping-down {
+  color: var(--error-color);
+  font-weight: 600;
+}
+
+.error-banner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  border: 1px solid rgba(239, 68, 68, 0.4);
+  background: rgba(239, 68, 68, 0.08);
+  color: #fca5a5;
+  font-size: 12.5px;
+  border-radius: 2px;
+}
+
+.err-ico {
+  flex-shrink: 0;
+}
+
+.err-text {
+  flex: 1;
+  font-family: 'Space Mono', monospace;
+  word-break: break-all;
+}
+
+.err-dismiss {
+  flex-shrink: 0;
+  width: 20px;
+  height: 20px;
+  border: none;
+  background: transparent;
+  color: inherit;
+  font-size: 15px;
+  cursor: pointer;
+  line-height: 1;
 }
 
 .tab-btn {
