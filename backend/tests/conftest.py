@@ -11,7 +11,7 @@ import pytest
 # ─── Disable real network/HTTP calls in tests by default ──────────────────────
 os.environ.setdefault("NEO4J_ENABLED", "false")
 os.environ.setdefault("MILVUS_ENABLED", "false")
-os.environ.setdefault("ASTRO_TEXT_ENABLED", "false")
+os.environ.setdefault("STARWHISPER_ENABLED", "false")
 os.environ.setdefault("MINIO_ENABLED", "false")
 os.environ.setdefault("WEB_SEARCH_ENABLED", "false")
 os.environ.setdefault("MCP_TOOLS_ENABLED", "false")

@@ -1,0 +1,56 @@
+{
+  "_meta": {
+    "description": "RetrievalService 的查询扩展规则。当用户查询命中 triggers 中任一关键词（大小写不敏感），会将 expansions 中未出现的词加到查询后面参与向量/BM25 检索，从而提升召回。",
+    "example": {
+      "triggers": ["黑洞", "black hole"],
+      "expansions": ["事件视界", "奇点"]
+    },
+    "version": 1
+  },
+  "rules": [
+    {
+      "triggers": ["黑洞", "black hole", "事件视界", "event horizon"],
+      "expansions": ["黑洞", "事件视界", "奇点", "引力透镜效应"]
+    },
+    {
+      "triggers": ["中子星", "neutron star", "脉冲星", "pulsar"],
+      "expansions": ["中子星", "脉冲星", "简并态物质", "磁场极强"]
+    },
+    {
+      "triggers": ["系外行星", "exoplanet", "宜居", "habitable"],
+      "expansions": ["系外行星", "宜居带", "凌日", "径向速度"]
+    },
+    {
+      "triggers": ["银河系", "milky way", "星系"],
+      "expansions": ["银河系", "旋臂", "银河系中心", "暗物质"]
+    },
+    {
+      "triggers": ["仙女座", "andromeda"],
+      "expansions": ["仙女座星系", "本星系群", "星系碰撞"]
+    },
+    {
+      "triggers": ["木星", "jupiter", "木星大红斑"],
+      "expansions": ["木星", "木星大红斑", "伽利略卫星", "气态巨行星"]
+    },
+    {
+      "triggers": ["土星", "saturn", "土星环", "环"],
+      "expansions": ["土星", "土星环", "卡西尼号", "土卫六"]
+    },
+    {
+      "triggers": ["火星", "mars", "红色", "火星车"],
+      "expansions": ["火星", "火星车", "水冰", "火星探测"]
+    },
+    {
+      "triggers": ["太阳", "sun", "日冕", "太阳风"],
+      "expansions": ["太阳", "日冕", "核聚变", "太阳黑子"]
+    },
+    {
+      "triggers": ["月球", "moon"],
+      "expansions": ["月球", "潮汐", "月球环形山", "阿波罗"]
+    },
+    {
+      "triggers": ["最新", "最近", "实时", "today", "latest", "recent"],
+      "expansions": ["最新", "发现", "观测", "进展"]
+    }
+  ]
+}

@@ -96,6 +96,21 @@ class Settings(BaseSettings):
             )
         return v
 
+    @field_validator("auth_cookie_secure")
+    @classmethod
+    def _enforce_cookie_secure_in_prod(cls, v: bool) -> bool:
+        # 生产环境没开 Secure 的话 refresh cookie 会跟着 HTTP 走，提醒一下
+        import os
+        env = os.getenv("APP_ENV", "dev").lower()
+        if env in ("production", "prod", "staging") and not v:
+            warnings.warn(
+                f"[Security WARN] auth_cookie_secure=False in {env} environment. "
+                "Refresh-token cookie will NOT be restricted to HTTPS. "
+                "Set AUTH_COOKIE_SECURE=true in production.",
+                UserWarning,
+            )
+        return v
+
     # ─── Application config ─────────────────────────────────────────────────────
     app_name: str = "AstroGraph API"
     app_env: str = "dev"
@@ -104,7 +119,9 @@ class Settings(BaseSettings):
     image_base_dirs: str = ""
     text_corpus_root: str = ""
     text_corpus_auto_ingest_on_startup: bool = True
-    local_fact_rules_path: str = "D:/Astro/backend/data/local_fact_rules.jsonl"
+    domain_fact_rules_default_path: str = "backend/data/domain_fact_rules.default.jsonl"
+    local_fact_rules_path: str = "backend/data/local_fact_rules.jsonl"
+    query_expansion_rules_path: str = "backend/data/query_expansion_rules.default.json"
     auto_load_images_catalog: bool = True
     auto_build_graph_on_startup: bool = True
     neo4j_enabled: bool = False
@@ -123,7 +140,29 @@ class Settings(BaseSettings):
     auth_cookie_samesite: str = "lax"
     model_adapter_path: str = "models/custom_model.py"
     model_class_name: str = "AstroModel"
-    # Legacy model configs removed — text QA now uses AstroSage-8B via custom_model.py
+    starwhisper_enabled: bool = False
+    starwhisper_required: bool = True
+    starwhisper_model_path: str = ""
+    starwhisper_tokenizer_path: str = ""
+    starwhisper_lazy_load: bool = True
+    starwhisper_quantization: str = "none"
+    starwhisper_max_new_tokens: int = 512
+    starwhisper_temperature: float = 0.3
+    starwhisper_top_p: float = 0.9
+    starwhisper_repetition_penalty: float = 1.08
+    starwhisper_cpu_offload: bool = True
+    starwhisper_offload_dir: str = "tmp/starwhisper_offload"
+    starwhisper_offload_state_dict: bool = False
+    starwhisper_max_cpu_memory: str = ""
+    starwhisper_min_total_memory_gib: float = 40.0
+    starwhisper_min_available_memory_gib: float = 20.0
+    spectrum_enabled: bool = True
+    spectrum_model_id: str = "AstroYuYang/Spectrum-Captioner"
+    spectrum_model_path: str = ""
+    spectrum_lazy_load: bool = True
+    spectrum_auto_download: bool = False
+    spectrum_min_total_memory_gib: float = 32.0
+    spectrum_min_available_memory_gib: float = 12.0
     minio_enabled: bool = False
     minio_endpoint: str = "localhost:9000"
     minio_secure: bool = False

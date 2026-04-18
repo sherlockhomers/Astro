@@ -67,12 +67,35 @@ class TestLogin:
         user_service.register("login_user2", "Password123")
         ok, msg, *_ = user_service.login("login_user2", "WrongPassword1")
         assert ok is False
-        assert "密码" in msg
+        # 用户存在 vs 密码错，文案应该统一，别给暴力破解留信息
+        assert "用户名或密码错误" in msg
 
     def test_login_nonexistent_user(self, user_service):
         ok, msg, *_ = user_service.login("ghost_user", "Password123")
         assert ok is False
-        assert "不存在" in msg
+        assert "用户名或密码错误" in msg
+
+    def test_login_lockout_after_repeated_failures(self, user_service):
+        user_service.register("lockout_user", "Password123")
+        for _ in range(5):
+            ok, _msg, *_ = user_service.login("lockout_user", "WrongPass1")
+            assert ok is False
+        # 已经错够 5 次了，再试即便密码对也得被拒
+        ok, msg, *_ = user_service.login("lockout_user", "Password123")
+        assert ok is False
+        assert "锁定" in msg
+
+    def test_lockout_cleared_after_successful_login(self, user_service):
+        user_service.register("clear_user", "Password123")
+        for _ in range(3):
+            user_service.login("clear_user", "wrong")
+        ok, msg, user_id, *_ = user_service.login("clear_user", "Password123")
+        assert ok is True
+        # 成功登录那一下会把计数清空，后面再错几次也没到阈值
+        for _ in range(4):
+            user_service.login("clear_user", "wrong")
+        ok2, _, *_ = user_service.login("clear_user", "Password123")
+        assert ok2 is True
 
 
 class TestJWT:

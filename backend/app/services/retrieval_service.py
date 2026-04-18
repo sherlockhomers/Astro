@@ -8,22 +8,8 @@ from urllib.parse import quote
 
 from app.config import settings
 from app.services.data_service import DataService
+from app.services.query_expansion import QueryExpander
 from app.services.vector_search_service import VectorSearchService
-
-
-QUERY_EXPANSION_RULES: list[tuple[tuple[str, ...], tuple[str, ...]]] = [
-    (("黑洞", "black hole", "事件视界", "event horizon"), ("黑洞", "事件视界", "奇点", "引力透镜效应")),
-    (("中子星", "neutron star", "脉冲星", "pulsar"), ("中子星", "脉冲星", "简并态物质", "磁场极强")),
-    (("系外行星", "exoplanet", "宜居", "habitable"), ("系外行星", "宜居带", "凌日", "径向速度")),
-    (("银河系", "milky way", "星系"), ("银河系", "旋臂", "银河系中心", "暗物质")),
-    (("仙女座", "andromeda"), ("仙女座星系", "本星系群", "星系碰撞")),
-    (("木星", "jupiter", "木星大红斑"), ("木星", "木星大红斑", "伽利略卫星", "气态巨行星")),
-    (("土星", "saturn", "土星环", "环"), ("土星", "土星环", "卡西尼号", "土卫六")),
-    (("火星", "mars", "红色", "火星车"), ("火星", "火星车", "水冰", "火星探测")),
-    (("太阳", "sun", "日冕", "太阳风"), ("太阳", "日冕", "核聚变", "太阳黑子")),
-    (("月球", "moon", "月球"), ("月球", "潮汐", "月球环形山", "阿波罗")),
-    (("最新", "最近", "实时", "today", "latest", "recent"), ("最新", "发现", "观测", "进展")),
-]
 
 
 class RetrievalService:
@@ -34,6 +20,12 @@ class RetrievalService:
         self._cache_hits = 0
         self._cache_misses = 0
         self._cache_evictions = 0
+        self._query_expander = QueryExpander(
+            path=str(getattr(settings, "query_expansion_rules_path", "") or "").strip()
+        )
+
+    def reload_expansion_rules(self) -> int:
+        return self._query_expander.reload()
 
     def search(self, query: str, top_k: int) -> tuple[list[dict], str]:
         top_k = max(1, min(int(top_k), 20))
@@ -109,22 +101,7 @@ class RetrievalService:
         }
 
     def _expand_query(self, query: str) -> tuple[str, list[str]]:
-        raw = str(query or "").strip()
-        if not raw:
-            return "", []
-
-        query_lower = raw.lower()
-        additions: list[str] = []
-        for triggers, expansions in QUERY_EXPANSION_RULES:
-            if any(trigger.lower() in query_lower for trigger in triggers):
-                for item in expansions:
-                    if item.lower() not in query_lower and item not in additions:
-                        additions.append(item)
-
-        if not additions:
-            return raw, []
-        expanded = f"{raw} {' '.join(additions[:6])}".strip()
-        return expanded, additions
+        return self._query_expander.expand(query)
 
     def _cache_enabled(self) -> bool:
         return int(getattr(settings, "retrieval_cache_max_entries", 0) or 0) > 0 and int(

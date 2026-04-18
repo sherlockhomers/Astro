@@ -1,3 +1,8 @@
+# 生产环境用的 compose。所有 ${VAR:?...} 的变量缺了就直接 fail，别想偷懒。
+# 起法：
+#   cp .env.prod.example .env.prod   # 改里面的占位符
+#   docker compose --env-file .env.prod -f docker-compose.prod.yml up -d
+
 services:
   backend:
     build:
@@ -8,15 +13,20 @@ services:
       - "8000:8000"
     environment:
       - APP_ENV=production
-      - AUTH_SECRET=${AUTH_SECRET:-change-this-to-random-32-chars}
+      - AUTH_SECRET=${AUTH_SECRET:?AUTH_SECRET is required (>=32 random chars)}
       - NEO4J_ENABLED=true
       - NEO4J_URI=bolt://neo4j:7687
-      - NEO4J_PASSWORD=password
+      - NEO4J_USER=neo4j
+      - NEO4J_PASSWORD=${NEO4J_PASSWORD:?NEO4J_PASSWORD is required}
       - MILVUS_ENABLED=true
       - MILVUS_HOST=milvus-standalone
       - MINIO_ENABLED=true
       - MINIO_ENDPOINT=minio:9000
-      - ALLOWED_ORIGINS=http://localhost,http://localhost:80
+      - MINIO_ACCESS_KEY=${MINIO_ROOT_USER:?MINIO_ROOT_USER is required}
+      - MINIO_SECRET_KEY=${MINIO_ROOT_PASSWORD:?MINIO_ROOT_PASSWORD is required}
+      - ALLOWED_ORIGINS=${ALLOWED_ORIGINS:?ALLOWED_ORIGINS is required}
+      - AUTH_COOKIE_SECURE=true
+      - MCP_NASA_API_KEY=${MCP_NASA_API_KEY:?MCP_NASA_API_KEY is required}
     volumes:
       - ./data:/app/data
       - backend_db:/app
@@ -32,7 +42,7 @@ services:
       context: ./frontend
       dockerfile: Dockerfile
       args:
-        - VITE_API_BASE_URL=http://localhost:8000
+        - VITE_API_BASE_URL=${VITE_API_BASE_URL:?VITE_API_BASE_URL is required}
     container_name: astro-frontend
     ports:
       - "80:80"
@@ -47,7 +57,7 @@ services:
       - "7474:7474"
       - "7687:7687"
     environment:
-      NEO4J_AUTH: neo4j/password
+      NEO4J_AUTH: neo4j/${NEO4J_PASSWORD:?NEO4J_PASSWORD is required}
     volumes:
       - neo4j_data:/data
     restart: unless-stopped
@@ -57,8 +67,8 @@ services:
     container_name: astro-minio
     command: server /data --console-address ":9001"
     environment:
-      MINIO_ROOT_USER: minioadmin
-      MINIO_ROOT_PASSWORD: minioadmin
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:?MINIO_ROOT_USER is required}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?MINIO_ROOT_PASSWORD is required}
     ports:
       - "9000:9000"
       - "9001:9001"
@@ -67,7 +77,7 @@ services:
     restart: unless-stopped
 
   milvus-standalone:
-    image: milvusdb/milvus:v2.3.21
+    image: milvusdb/milvus:v2.4.13
     container_name: astro-milvus
     command: ["milvus", "run", "standalone"]
     ports:
@@ -85,7 +95,7 @@ services:
     container_name: astro-redis
     ports:
       - "6379:6379"
-    command: ["redis-server", "--appendonly", "yes"]
+    command: ["redis-server", "--appendonly", "yes", "--requirepass", "${REDIS_PASSWORD:?REDIS_PASSWORD is required}"]
     volumes:
       - redis_data:/data
     restart: unless-stopped

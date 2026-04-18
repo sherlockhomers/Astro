@@ -170,7 +170,7 @@ export async function getLandingScienceCards(limit = 8) {
   return data;
 }
 
-export async function getLandingFrontier(perTopic = 15) {
+export async function getLandingFrontier(perTopic = 36) {
   const { data } = await api.get("/api/v1/landing/frontier", { params: { per_topic: perTopic } });
   return data;
 }
@@ -615,8 +615,12 @@ export async function getImageIndexStatus() {
   return data;
 }
 
-export async function triggerImageIndex(force = false) {
-  const { data } = await api.post(`/api/v1/image/index-trigger?force=${force ? "true" : "false"}`);
+export async function triggerImageIndex(force = false, internalToken?: string) {
+  const { data } = await api.post(
+    "/api/v1/image/index-trigger",
+    { force },
+    internalToken ? internalHeaders(internalToken) : undefined
+  );
   return data;
 }
 

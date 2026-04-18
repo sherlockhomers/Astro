@@ -19,6 +19,10 @@ def _utcnow() -> datetime:
 
 
 class UserService:
+    # 同一个账号 15 分钟内错 5 次就先暂停，简单防暴力破解
+    _LOGIN_FAILURE_LIMIT = 5
+    _LOGIN_LOCKOUT_MINUTES = 15
+
     def __init__(self) -> None:
         self._db_path = settings.sqlite_path
         self._password_iterations = 200_000
@@ -91,7 +95,18 @@ class UserService:
             )
             """
         )
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS login_failures (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                username TEXT NOT NULL,
+                ip_address TEXT,
+                failed_at TEXT NOT NULL
+            )
+            """
+        )
         conn.execute("CREATE INDEX IF NOT EXISTS idx_users_username ON users(username)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_login_failures_lookup ON login_failures(username, failed_at DESC)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_qa_history_user_id ON qa_history(user_id, id DESC)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_refresh_sessions_user_id ON refresh_sessions(user_id, id DESC)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_refresh_sessions_expires_at ON refresh_sessions(expires_at)")
@@ -159,13 +174,29 @@ class UserService:
         user_agent: str = "",
         ip_address: str = "",
     ) -> tuple[bool, str, int | None, str | None, str | None, str | None, int | None]:
-        row = self._get_user_row(username)
+        normalized_username = str(username or "").strip()
+
+        locked_until = self._is_locked_out(normalized_username)
+        if locked_until is not None:
+            seconds_left = max(1, int((locked_until - _utcnow()).total_seconds()))
+            minutes_left = (seconds_left + 59) // 60
+            return (
+                False,
+                f"连续登录失败次数过多，账户已暂时锁定。请在 {minutes_left} 分钟后重试。",
+                None, None, None, None, None,
+            )
+
+        # 下面两处一律返回同一个错误，避免用错误文案区分出"用户存在 / 不存在"
+        row = self._get_user_row(normalized_username)
         if row is None:
-            return False, "用户不存在。", None, None, None, None, None
+            self._record_login_failure(normalized_username, ip_address)
+            return False, "用户名或密码错误。", None, None, None, None, None
 
         if not self._verify_password(row, password):
-            return False, "密码错误。", None, None, None, None, None
+            self._record_login_failure(normalized_username, ip_address)
+            return False, "用户名或密码错误。", None, None, None, None, None
 
+        self._clear_login_failures(normalized_username)
         user_id = int(row["id"])
         canonical_username = str(row["username"])
         access_token, refresh_token, expires_in = self._issue_session(
@@ -175,6 +206,53 @@ class UserService:
             ip_address=ip_address,
         )
         return True, "登录成功。", user_id, canonical_username, access_token, refresh_token, expires_in
+
+    def _record_login_failure(self, username: str, ip_address: str) -> None:
+        if not username:
+            return
+        conn = self._connect()
+        now = _utcnow().isoformat()
+        conn.execute(
+            "INSERT INTO login_failures (username, ip_address, failed_at) VALUES (?, ?, ?)",
+            (username, ip_address or "", now),
+        )
+        # 顺手把太老的记录清掉，不然这张表会慢慢变大
+        cutoff = (_utcnow() - timedelta(minutes=self._LOGIN_LOCKOUT_MINUTES * 4)).isoformat()
+        conn.execute("DELETE FROM login_failures WHERE failed_at < ?", (cutoff,))
+        conn.commit()
+
+    def _clear_login_failures(self, username: str) -> None:
+        if not username:
+            return
+        conn = self._connect()
+        conn.execute("DELETE FROM login_failures WHERE username = ?", (username,))
+        conn.commit()
+
+    def _is_locked_out(self, username: str) -> datetime | None:
+        # 返回值：被锁了就是"解锁的那一刻"，没锁就是 None
+        if not username:
+            return None
+        window_start = _utcnow() - timedelta(minutes=self._LOGIN_LOCKOUT_MINUTES)
+        conn = self._connect()
+        row = conn.execute(
+            """
+            SELECT COUNT(*) AS cnt, MAX(failed_at) AS last_at
+            FROM login_failures
+            WHERE username = ? AND failed_at >= ?
+            """,
+            (username, window_start.isoformat()),
+        ).fetchone()
+        count = int(row["cnt"]) if row and row["cnt"] is not None else 0
+        if count < self._LOGIN_FAILURE_LIMIT:
+            return None
+        last_at_str = str(row["last_at"]) if row and row["last_at"] else None
+        if not last_at_str:
+            return None
+        try:
+            last_at = datetime.fromisoformat(last_at_str)
+        except ValueError:
+            return None
+        return last_at + timedelta(minutes=self._LOGIN_LOCKOUT_MINUTES)
 
     def refresh_session(
         self,

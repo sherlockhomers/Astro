@@ -4,40 +4,78 @@
 __pycache__/
 *.pyc
 *.pyo
+*.egg-info/
+*.egg
+dist-python/
+build/
+htmlcov/
+.coverage
+.coverage.*
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
 
-# Node
+# Node / 前端产物
 node_modules/
 dist/
+.vite/
+.vite-cache/
 
-# Environment
+# 环境变量和密钥千万别提交
 .env
-.DS_Store
+.env.local
+.env.*.local
+*.pem
+*.key
 
 # IDE
 .cursor/
 .codex/
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
 
-# Logs
+# 日志
 *.log
 logs/
+backend/*.log
+backend/logs/
+frontend/*.log
+frontend/logs/
 
-# Database
+# 数据库
 *.db
 *.db-shm
 *.db-wal
+*.sqlite
+*.sqlite3
 
-# Temp
+# 大文件：PPT、Word、PDF 走 git-lfs 或对象存储，不走 git
+*.pptx
+*.ppt
+*.doc
+*.docx
+*.pdf
+ppt_content.txt
+
+# 临时文件
 tmp/
 .tmp/
 .npm-cache/
+backend/tmp/
 
 # OS
 Thumbs.db
+desktop.ini
 
-# Large binary files
-*.pptx
-*.xlsx
-
-# Private docs (defense/evaluation)
-docs/答辩稿.md
-docs/评测数据参考.md
+# 模型权重同理，不进库
+*.bin
+*.safetensors
+*.onnx
+*.ckpt
+*.pt
+*.pth
+backend/vendor/models/
+backend/models/weights/

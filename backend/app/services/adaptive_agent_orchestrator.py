@@ -15,6 +15,7 @@ from app.services.mcp_tool_service import MCPToolService
 from app.services.model_service import ModelService
 from app.services.retrieval_service import RetrievalService
 from app.services.sqlite_service import get_sqlite_connection
+from app.services.fact_rules_loader import FactRulesLoader
 from app.services.web_search_service import WebSearchService
 
 try:
@@ -27,186 +28,8 @@ EXOPLANET_PATTERNS = (
     r"\b[A-Za-z]{2,8}[-\s]?\d{2,7}\s?[bcdefg]\b",
 )
 
-# 领域事实护栏规则。命中后直接返回更稳健的科普答案，
-# 避免模型在高频天文事实上偏题或答非所问。
-DOMAIN_FACT_RULES: list[dict[str, Any]] = [
-    {
-        "all_of": ["火星", "地球"],
-        "any_of": ["距离", "多远", "公里", "千米", "au", "AU", "天文单位"],
-        "answer": (
-            "地球与火星之间的距离**不是常数**，会随两颗行星在各自轨道上的位置而变化。\n\n"
-            "常用量级（地心—火心直线距离的大致范围）：\n"
-            "- **最近**（火星大冲附近）：约 **5.4×10⁷ km**（约 **0.37 AU**）。\n"
-            "- **最远**（太阳两侧）：约 **4×10⁸ km**（约 **2.7 AU**）。\n"
-            "- **平均**：常粗略记为约 **2.25×10⁸ km**（约 **1.5 AU**）。\n\n"
-            "探测器实际飞行时间取决于发射窗口与转移轨道，不能简单用「距离 ÷ 速度」换算。"
-        ),
-    },
-    {
-        "all_of": ["火星"],
-        "any_of": ["距离地球", "离地球", "到地球", "和地球", "与地球", "距地球"],
-        "answer": (
-            "若问的是**火星与地球**之间的距离：它会随轨道位置变化。\n\n"
-            "大致范围：最近约 **0.37 AU**（约 **5.4×10⁷ km**），最远约 **2.7 AU**（约 **4×10⁸ km**），"
-            "平均常粗略取 **1.5 AU** 左右。\n\n"
-            "若你关心的是**火星车任务耗时**，那与具体年份的发射窗口和地火转移轨道有关，可补充任务名我再帮你对齐公开资料。"
-        ),
-    },
-    {
-        "all_of": ["黑洞", "光"],
-        "any_of": ["逃离", "逃出", "逃逸", "为什么", "怎么"],
-        "answer": (
-            "严格来说，光一旦落入黑洞的事件视界以内，就无法再逃出来。"
-            "人们常说‘黑洞会发光’，并不是说黑洞内部的光逃逸出来，"
-            "而是黑洞周围的吸积盘被加热后产生强辐射，或者在极端理论条件下出现霍金辐射。"
-            "也就是说，黑洞本体仍然是黑的，但它周围环境可能非常明亮，"
-            "这正是天文学家间接识别黑洞的重要方式。"
-        ),
-    },
-    {
-        "all_of": ["火星"],
-        "any_of": ["结构", "内部", "核心", "地壳", "构造"],
-        "answer": (
-            "火星的内部结构与地球类似，由三层组成。"
-            "最外层是富含铁氧化物的硅酸盐地壳，厚度约50-125公里，远厚于地球地壳。"
-            "中间是硅酸盐地幔，目前已不再对流。核心是富含铁和硫化铁的金属核，"
-            "半径约1800公里，由于核心已基本冷却凝固，火星几乎没有全球性磁场。"
-            "这种缺失的磁场是火星大气逐渐被太阳风剥蚀的重要原因。"
-            "InSight着陆器的地震数据首次直接探测了火星内部结构，确认了这一分层模型。"
-        ),
-    },
-    {
-        "all_of": ["火星"],
-        "any_of": ["大气", "空气", "大气层", "大气成分"],
-        "answer": (
-            "火星大气极为稀薄，表面气压仅为地球的约0.6%（约610帕斯卡）。"
-            "大气成分以二氧化碳为主（约95.3%），其次是氮气（2.7%）和氩气（1.6%），"
-            "氧气含量极微（约0.13%）。火星大气中还含有少量水蒸气和甲烷。"
-            "由于大气稀薄且缺乏全球磁场保护，火星表面暴露在宇宙辐射下，"
-            "温室效应微弱，导致平均表面温度仅约-63℃。"
-        ),
-    },
-    {
-        "all_of": ["火星"],
-        "any_of": ["温度", "多冷", "多热", "气温"],
-        "answer": (
-            "火星的表面温度变化范围很大：赤道附近白天可达约20℃，夜间降至约-73℃，"
-            "极地冬季可低至约-143℃。平均表面温度约为-63℃。"
-            "这种极端温差主要是因为火星大气极其稀薄（仅地球气压的0.6%），"
-            "无法有效保留热量。此外，火星轨道偏心率较大，使得季节温差也比地球更明显。"
-        ),
-    },
-    {
-        "all_of": ["火星", "生命"],
-        "any_of": [],
-        "answer": (
-            "目前没有确凿证据证明火星存在或曾经存在生命，但大量观测表明，"
-            "早期火星曾具备比现在更适合生命出现的环境。轨道器和火星车发现了古河道、湖泊沉积、含水矿物和有机分子线索，"
-            "说明火星过去确实长期存在液态水活动。现在真正的问题不是火星有没有过适居环境，"
-            "而是这些环境是否稳定到足以支持生命长期演化，以及潜在生命信号是否被后期地质过程改写。"
-        ),
-    },
-    {
-        "all_of": ["木星", "卫星"],
-        "any_of": ["多少", "几个", "为什么", "这么多", "数量"],
-        "answer": (
-            "木星拥有大量卫星，根本原因是它质量极大、引力范围广。"
-            "在太阳系形成早期，它更容易捕获周围小天体，也更容易保留下已经形成的卫星系统。"
-            "从动力学上看，木星的希尔球范围很大，能稳定控制更大区域内的轨道。"
-            "因此今天我们看到的是一个层次丰富的木星卫星家族，其中最著名的是伽利略四大卫星。"
-        ),
-    },
-    {
-        "all_of": ["土星", "环"],
-        "any_of": ["什么", "为什么", "组成", "形成", "主要"],
-        "answer": (
-            "土星环主要由无数冰粒和岩石碎块组成，颗粒大小从尘埃到数米不等。"
-            "由于冰的比例很高，土星环具有非常强的反照率，所以在望远镜里显得格外明亮。"
-            "关于它们的形成机制，主流观点包括被潮汐力撕碎的卫星残骸，"
-            "以及太阳系早期未能聚合成卫星的原始物质。Cassini 探测器的观测还提示，土星环可能比太阳系本身年轻得多。"
-        ),
-    },
-    {
-        "all_of": ["黑洞", "时间"],
-        "any_of": ["变慢", "膨胀", "扭曲", "效应", "引力"],
-        "answer": (
-            "根据广义相对论，引力场越强，时间流逝越慢。"
-            "在黑洞附近，这种引力时间膨胀会变得极端明显。对远处观察者来说，"
-            "靠近事件视界的物体会看起来越来越慢、越来越暗，并逐渐红移；"
-            "但对物体自身而言，局部时间依然正常流逝。黑洞因此是检验极端时空效应的天然实验室。"
-        ),
-    },
-    {
-        "all_of": ["中子星"],
-        "any_of": ["什么", "密度", "形成", "脉冲星", "为什么"],
-        "answer": (
-            "中子星是大质量恒星在超新星爆发后留下的极端致密核心。"
-            "它的直径通常只有二十公里左右，但质量却能与太阳相当，密度高到接近原子核尺度。"
-            "快速自转、强磁场的中子星会表现为脉冲星，发出极其规律的脉冲信号。"
-            "双中子星并合还会产生引力波，并被认为是宇宙中金、铂等重元素的重要来源之一。"
-        ),
-    },
-    {
-        "all_of": ["银河系"],
-        "any_of": ["多大", "直径", "多少", "结构", "组成"],
-        "answer": (
-            "银河系是一个直径约10-12万光年的棒旋星系，包含约2000-4000亿颗恒星。"
-            "从侧面看，银河系呈扁平盘状结构，中心有一个约2.6万光年半径的核球。"
-            "太阳系位于猎户座旋臂上，距离银河系中心约2.6万光年。"
-            "银河系中心存在一个约400万倍太阳质量的超大质量黑洞——人马座A*。"
-        ),
-    },
-    {
-        "all_of": ["彗星", "尾巴"],
-        "any_of": ["为什么", "怎么", "形成"],
-        "answer": (
-            "彗星的彗尾不是甩出来的，而是在接近太阳时由彗核表面的冰物质升华形成。"
-            "彗尾有两类：离子尾（受太阳风支配，始终指向太阳背向）和尘埃尾（受太阳辐射压力，略偏轨道后方）。"
-            "彗尾可长达数百万公里，但由于物质极为稀薄，实际上几乎是真空。"
-        ),
-    },
-    {
-        "all_of": ["金星", "逆向", "自转"],
-        "any_of": ["为什么", "怎么回事"],
-        "answer": (
-            "金星是太阳系中唯一逆向自转（自转方向与公转方向相反）的大行星。"
-            "它的自转周期约为243个地球日，比公转周期（225天）还长，意味着在金星上一天比一年还长。"
-            "关于逆向自转的原因，主流假说认为：在太阳系早期，金星可能遭受过巨大天体撞击，"
-            "或受到太阳潮汐力与深厚大气层的耦合作用，导致了自转方向反转。"
-        ),
-    },
-    {
-        "all_of": ["水星", "冰"],
-        "any_of": ["有没有", "为什么", "哪里"],
-        "answer": (
-            "水星朝向太阳的表面温度可达约430摄氏度，足以熔化铅。"
-            "但由于水星几乎没有大气，热量难以保存，阴影陨石坑底部温度可降至约零下180摄氏度。"
-            "NASA的信使号探测器在极区陨石坑内部发现了水冰证据，这些冰位于永久阴影区，"
-            "可能来源于富含水冰的陨石撞击沉积，或水分子从水星表面缓慢释放后在极区冷阱中凝结。"
-        ),
-    },
-    {
-        "all_of": ["冥王星"],
-        "any_of": ["为什么", "不是", "降级", "九大行星", "分类"],
-        "answer": (
-            "2006年冥王星被国际天文学联合会重新分类为矮行星，不再是太阳系的第九大行星。"
-            "原因是冥王星未能清除其轨道附近的其他天体——这是行星定义的三个条件之一。"
-            "冥王星位于柯伊伯带，那里还有许多类似大小的冰质天体，如�神星（Eris）。"
-            "2015年新视野号探测器飞掠冥王星，发现它拥有氮冰平原、巨大的心形冰原和壮观的冰火山，"
-            "其复杂程度远超此前想象，表面甚至有活跃的地质活动。"
-        ),
-    },
-    {
-        "all_of": ["宇宙", "年龄"],
-        "any_of": ["多大", "多少", "怎么"],
-        "answer": (
-            "根据当前宇宙学模型，宇宙的年龄约为137.87亿年，误差约2000万年。"
-            "这一结论主要基于宇宙微波背景辐射（CMB）的精密测量和哈勃常数的推算。"
-            "大爆炸之后约38万年，宇宙冷却到足以让光子与物质分离，形成了今天依然可观测的CMB。"
-            "宇宙从那时起一直在膨胀，这也是宇宙中星系光谱普遍红移的原因。"
-        ),
-    },
-]
+# 领域事实规则放 backend/data/domain_fact_rules.default.jsonl，通过 FactRulesLoader 读
+# （要改规则直接改文件，然后调 reload_fact_rules 就行，不用重启）
 
 
 class AdaptiveAgentOrchestrator:
@@ -244,33 +67,16 @@ class AdaptiveAgentOrchestrator:
                 self._cloud_llm = None
         self._db_path = settings.sqlite_path
         self._init_db()
-        self._domain_fact_rules = self._load_domain_fact_rules()
+        self._fact_rules = FactRulesLoader(
+            paths=[
+                str(getattr(settings, "domain_fact_rules_default_path", "") or "").strip(),
+                str(getattr(settings, "local_fact_rules_path", "") or "").strip(),
+            ]
+        )
 
-    def _load_domain_fact_rules(self) -> list[dict[str, Any]]:
-        rules = list(DOMAIN_FACT_RULES)
-        raw_path = str(getattr(settings, "local_fact_rules_path", "") or "").strip()
-        if not raw_path:
-            return rules
-        path = Path(raw_path)
-        if not path.exists() or not path.is_file():
-            return rules
-        try:
-            loaded: list[dict[str, Any]] = []
-            if path.suffix.lower() == ".jsonl":
-                for line in path.read_text(encoding="utf-8", errors="ignore").splitlines():
-                    line = line.strip()
-                    if not line:
-                        continue
-                    payload = json.loads(line)
-                    if isinstance(payload, dict) and str(payload.get("answer", "")).strip():
-                        loaded.append(payload)
-            else:
-                payload = json.loads(path.read_text(encoding="utf-8", errors="ignore"))
-                if isinstance(payload, list):
-                    loaded = [item for item in payload if isinstance(item, dict) and str(item.get("answer", "")).strip()]
-            return rules + loaded
-        except Exception:
-            return rules
+    def reload_fact_rules(self) -> dict[str, Any]:
+        bundle = self._fact_rules.reload()
+        return {"count": len(bundle.rules), "sources": list(bundle.sources)}
 
     def run(
         self,
@@ -482,20 +288,7 @@ class AdaptiveAgentOrchestrator:
         }
 
     def _match_domain_fact_guard(self, question: str) -> str:
-        q = str(question or "").strip()
-        if not q:
-            return ""
-        for rule in self._domain_fact_rules:
-            all_of = [str(x).strip() for x in rule.get("all_of", []) if str(x).strip()]
-            any_of = [str(x).strip() for x in rule.get("any_of", []) if str(x).strip()]
-            if all_of and any(token not in q for token in all_of):
-                continue
-            if any_of and not any(token in q for token in any_of):
-                continue
-            answer = str(rule.get("answer", "")).strip()
-            if answer:
-                return answer
-        return ""
+        return self._fact_rules.match(question)
 
     def _cloud_enhance_if_needed(
         self,
@@ -605,22 +398,11 @@ class AdaptiveAgentOrchestrator:
         return []
 
     def _apply_domain_fact_guards(self, question: str, answer: str) -> str:
-        q = str(question or "").strip()
         text = str(answer or "").strip()
-        if not q or not text:
+        if not text:
             return text
-
-        for rule in self._domain_fact_rules:
-            all_of = [str(x).strip() for x in rule.get("all_of", []) if str(x).strip()]
-            any_of = [str(x).strip() for x in rule.get("any_of", []) if str(x).strip()]
-            if any(token not in q for token in all_of):
-                continue
-            if any_of and not any(token in q for token in any_of):
-                continue
-            guarded = str(rule.get("answer", "")).strip()
-            if guarded:
-                return guarded
-        return text
+        guarded = self._fact_rules.match(question)
+        return guarded or text
 
     def _decide_strategy(
         self,

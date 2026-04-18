@@ -25,5 +25,5 @@ def landing_science_cards(limit: int = 8, svc: ServiceContainer = Depends(get_se
 
 
 @router.get("/frontier")
-def landing_frontier(per_topic: int = 15, svc: ServiceContainer = Depends(get_services)) -> dict:
+def landing_frontier(per_topic: int = 36, svc: ServiceContainer = Depends(get_services)) -> dict:
     return svc.landing.get_frontier(per_topic=per_topic)

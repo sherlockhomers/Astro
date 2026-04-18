@@ -147,11 +147,14 @@ class LandingContentService:
         limit = max(4, min(int(limit), 16))
         return self._cards_cache[:limit]
 
-    def get_frontier(self, per_topic: int = 15) -> dict[str, Any]:
-        per_topic = max(9, min(int(per_topic), 30))
+    def get_frontier(self, per_topic: int = 30) -> dict[str, Any]:
+        # 前端要分页，一栏给 30~60 条都不算过分
+        per_topic = max(9, min(int(per_topic), 60))
         now = time.time()
         with self._lock:
-            if self._frontier_cache.get("topics") and now - self._frontier_cache_at < 300:
+            cached_max = max((len(t.get("items", [])) for t in self._frontier_cache.get("topics", [])), default=0)
+            # 缓存足够新、且条数不比这次要的少，就直接返
+            if self._frontier_cache.get("topics") and cached_max >= per_topic and now - self._frontier_cache_at < 300:
                 return self._frontier_cache
 
         topics_config = [

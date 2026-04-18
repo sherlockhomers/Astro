@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { computed, defineAsyncComponent, onMounted, onUnmounted, ref } from "vue";
+import { computed, defineAsyncComponent, onMounted, onUnmounted, ref, watch } from "vue";
+import { storeToRefs } from "pinia";
 import { useRouter } from "vue-router";
 import { celestialBodies } from "../data/celestials";
-import { getGraphStatus, getLandingApod, getLandingFrontier, getLandingNews } from "../api";
+import { LANDING_REFRESH_INTERVAL_MS, useLandingStore } from "../stores/landingCache";
 
 import landingBg from "../assets/landing-bg.png";
 
@@ -58,27 +59,29 @@ type FrontierTopic = {
 
 const router = useRouter();
 const exploreInput = ref("木星为什么会有这么多卫星？");
-const apodData = ref<any>(null);
-const newsItems = ref<NewsItem[]>([]);
+
+// 切到别的页面再回来的时候，这些数据从 store 里直接取，不用干等接口
+const landingStore = useLandingStore();
+const { apod: apodData, news: newsItems, frontierTopics, refreshing } = storeToRefs(landingStore);
+
 const scienceCards = ref<ScienceCard[]>([]);
-const frontierTopics = ref<FrontierTopic[]>([]);
-const landingLoading = ref(false);
 
 // Stats counter
 const statsDisplayed = ref({ nodes: 0, bodies: 0, timelines: 0, papers: 0 });
 const statsTarget = ref({ nodes: 0, bodies: celestialBodies.length, timelines: 0, papers: 0 });
 
 const frontierPage = ref(1);
-const frontierPageSize = 3;
+const frontierPageSize = ref(4);
 const frontierPageCount = ref(5);
+const frontierPageSizeOptions = [3, 4, 6, 9];
 
 let refreshTimer: number | null = null;
 let statsTimer: number | null = null;
 
 const frontierColumns = computed(() =>
   frontierTopics.value.map((topic) => {
-    const start = (frontierPage.value - 1) * frontierPageSize;
-    const end = start + frontierPageSize;
+    const start = (frontierPage.value - 1) * frontierPageSize.value;
+    const end = start + frontierPageSize.value;
     return {
       ...topic,
       pageItems: (topic.items || []).slice(start, end),
@@ -152,72 +155,64 @@ function countUpStats() {
   }, interval);
 }
 
-async function loadLandingData() {
-  landingLoading.value = true;
-  try {
-    const [apod, newsRes, frontierRes] = await Promise.all([
-      getLandingApod().catch((e) => {
-        console.warn("APOD load failed", e);
-        return null;
-      }),
-      getLandingNews(6).catch(() => ({ items: [] })),
-      getLandingFrontier(18).catch(() => ({ topics: [] })),
-    ]);
-
-    apodData.value = apod;
-    if (!apodData.value) {
-      apodData.value = {
-        title: "星空（离线预览）",
-        date: new Date().toISOString().split("T")[0],
-        explanation: "暂时无法从后端获取 NASA APOD，请确认后端已启动并可访问外网。",
-        media_type: "image",
-        url: "https://images.unsplash.com/photo-1462331940025-496dfbfc7564?q=80&w=2574&auto=format&fit=crop",
-        hdurl: "https://images.unsplash.com/photo-1462331940025-496dfbfc7564?q=80&w=2574&auto=format&fit=crop",
-      };
-    }
-
-    newsItems.value = Array.isArray(newsRes?.items) ? newsRes.items : [];
-
-    const topics = Array.isArray(frontierRes?.topics) ? frontierRes.topics : [];
-    frontierTopics.value = topics.map((t: Record<string, unknown>) => ({
-      key: String(t.key ?? ""),
-      label: String(t.label ?? ""),
-      items: Array.isArray(t.items) ? (t.items as FrontierPaper[]) : [],
-    }));
-
-    const lens = frontierTopics.value.map((t) => t.items.length);
-    const maxLen = lens.length ? Math.max(...lens) : 0;
-    frontierPageCount.value = Math.max(1, Math.ceil(maxLen / frontierPageSize));
-
-    scienceCards.value = celestialBodies.map((body) => ({
-      name: body.name,
-      type: body.type,
-      image_url: body.gridImage,
-      desc: body.desc,
-      facts: body.basicData,
-      url: `/celestial/${body.id}`,
-    }));
-
-    try {
-      const graphStatus = await getGraphStatus();
-      statsTarget.value.nodes = Number(graphStatus?.nodes_count ?? 0);
-    } catch {
-      statsTarget.value.nodes = 0;
-    }
-    statsTarget.value.timelines = celestialBodies.reduce((s, b) => s + (b.timeline?.length || 0), 0);
-    statsTarget.value.papers = frontierTopics.value.reduce((s, t) => s + t.items.length, 0);
-    countUpStats();
-  } finally {
-    landingLoading.value = false;
+// 后端/NASA 挂了也不至于让 Hero 变白板，给个占位的
+function applyApodFallbackIfEmpty() {
+  if (!apodData.value) {
+    apodData.value = {
+      title: "星空（离线预览）",
+      date: new Date().toISOString().split("T")[0],
+      explanation: "暂时无法从后端获取 NASA APOD，请确认后端已启动并可访问外网。",
+      media_type: "image",
+      url: APOD_FALLBACK_IMAGE,
+      hdurl: APOD_FALLBACK_IMAGE
+    };
   }
 }
 
-onMounted(() => {
-  universeTimer = window.setTimeout(() => { universeReady.value = true; }, 800);
-  loadLandingData();
+function recomputeStatsAndPaging() {
+  scienceCards.value = celestialBodies.map((body) => ({
+    name: body.name,
+    type: body.type,
+    image_url: body.gridImage,
+    desc: body.desc,
+    facts: body.basicData,
+    url: `/celestial/${body.id}`
+  }));
+
+  const lens = frontierTopics.value.map((t) => t.items.length);
+  const maxLen = lens.length ? Math.max(...lens) : 0;
+  frontierPageCount.value = Math.max(1, Math.ceil(maxLen / frontierPageSize.value));
+  if (frontierPage.value > frontierPageCount.value) {
+    frontierPage.value = 1;
+  }
+
+  statsTarget.value.nodes = landingStore.graphNodes;
+  statsTarget.value.timelines = celestialBodies.reduce((s, b) => s + (b.timeline?.length || 0), 0);
+  statsTarget.value.papers = frontierTopics.value.reduce((s, t) => s + t.items.length, 0);
+  countUpStats();
+}
+
+onMounted(async () => {
+  universeTimer = window.setTimeout(() => {
+    universeReady.value = true;
+  }, 800);
+
+  // 有旧数据就立刻渲染，再按新鲜度决定要不要悄悄刷；第一次才会阻塞等接口
+  if (landingStore.hasData) {
+    applyApodFallbackIfEmpty();
+    recomputeStatsAndPaging();
+    if (landingStore.isStale) {
+      landingStore.refreshInBackground();
+    }
+  } else {
+    await landingStore.ensureFresh();
+    applyApodFallbackIfEmpty();
+    recomputeStatsAndPaging();
+  }
+
   refreshTimer = window.setInterval(() => {
-    loadLandingData();
-  }, 4 * 60 * 1000);
+    landingStore.refreshInBackground();
+  }, LANDING_REFRESH_INTERVAL_MS);
 
   const observerOptions = { rootMargin: "200px", threshold: 0.01 };
   solarObserver = new IntersectionObserver(([entry]) => {
@@ -235,6 +230,23 @@ onMounted(() => {
   if (solarRef.value) solarObserver.observe(solarRef.value);
   if (aladinRef.value) aladinObserver.observe(aladinRef.value);
 });
+
+// 后台静默刷新后，分页数量和顶部滚动统计数字得跟着动一下
+watch([frontierTopics, () => landingStore.graphNodes], () => {
+  recomputeStatsAndPaging();
+});
+
+// 换了每页条数要重算页数，顺便回到第一页
+watch(frontierPageSize, () => {
+  const lens = frontierTopics.value.map((t) => t.items.length);
+  const maxLen = lens.length ? Math.max(...lens) : 0;
+  frontierPageCount.value = Math.max(1, Math.ceil(maxLen / frontierPageSize.value));
+  frontierPage.value = 1;
+});
+
+const frontierTotalPapers = computed(() =>
+  frontierTopics.value.reduce((sum, t) => sum + (t.items?.length || 0), 0)
+);
 
 onUnmounted(() => {
   if (refreshTimer) { window.clearInterval(refreshTimer); refreshTimer = null; }
@@ -431,7 +443,12 @@ onUnmounted(() => {
         <div class="section-head center">
           <span class="section-badge">arXiv LIVE FEED</span>
           <p class="section-title xl">前沿天文文献</p>
-          <p class="section-subtitle">实时拉取 arXiv 最新论文 · 每次加载均为真实更新</p>
+          <p class="section-subtitle">
+            实时拉取 arXiv 最新论文 · 每次加载均为真实更新
+            <span class="frontier-count">
+              · 已获取 <strong>{{ frontierTotalPapers }}</strong> 篇，每栏最多 {{ frontierTotalPapers && frontierTopics.length ? Math.ceil(frontierTotalPapers / frontierTopics.length) : 0 }} 篇
+            </span>
+          </p>
         </div>
         <div class="frontier-grid">
           <section
@@ -463,12 +480,30 @@ onUnmounted(() => {
         </div>
 
         <div class="frontier-pagination">
+          <div class="frontier-page-size">
+            <span class="page-size-label">每页</span>
+            <el-select
+              v-model="frontierPageSize"
+              size="small"
+              style="width: 78px"
+            >
+              <el-option
+                v-for="n in frontierPageSizeOptions"
+                :key="n"
+                :label="`${n} 篇`"
+                :value="n"
+              />
+            </el-select>
+          </div>
           <el-pagination
             background
-            layout="prev, pager, next"
+            layout="prev, pager, next, jumper"
             :page-count="frontierPageCount"
             v-model:current-page="frontierPage"
           />
+          <div class="frontier-page-indicator">
+            第 {{ frontierPage }} / {{ frontierPageCount }} 页
+          </div>
         </div>
       </section>
       <section ref="aladinRef" class="aladin-section">
@@ -1084,7 +1119,39 @@ h1 {
   margin-top: 14px;
   display: flex;
   justify-content: center;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
   pointer-events: auto;
+}
+
+.frontier-page-size {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.page-size-label {
+  color: var(--text-secondary);
+  font-size: 12px;
+  letter-spacing: 0.5px;
+}
+
+.frontier-page-indicator {
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.frontier-count {
+  color: var(--text-secondary);
+  font-size: 12px;
+  margin-left: 4px;
+}
+
+.frontier-count strong {
+  color: var(--astro-primary);
+  font-weight: 600;
 }
 
 @media (max-width: 1200px) {

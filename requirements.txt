@@ -1,38 +1,5 @@
-# Web API
-fastapi
-uvicorn[standard]
-pydantic
-pydantic-settings
-python-multipart
-
-# Data processing
-pandas
-numpy
-scipy
-scikit-learn
-tqdm
-python-dateutil
-
-# Files and images
-pillow
-opencv-python
-
-# Graph / vector / storage clients
-neo4j
-pymilvus
-minio
-redis
-
-# LLM and RAG
-openai
-langchain
-langchain-community
-sentence-transformers
-transformers
-accelerate
-
-# Graph and utility
-networkx
-requests
-python-dotenv
-pyyaml
+# ─────────────────────────────────────────────────────────────────────────────
+# DEPRECATED: 保留作兼容入口，真实依赖源是 backend/requirements.txt
+# 建议使用: pip install -r backend/requirements.txt
+# ─────────────────────────────────────────────────────────────────────────────
+-r backend/requirements.txt

@@ -80,33 +80,45 @@ const router = createRouter({
   ]
 });
 
-let sessionChecked = false;
-let sessionValid = false;
+// 登录态缓存：只缓存"确认登录成功"的情况，失败不缓存。
+// 失败缓存会踩坑 —— 用户在另一个 tab 登录了，本 tab 一直以为没登录。
+const SESSION_CACHE_TTL_MS = 30_000;
+let sessionValidUntil = 0;
+
+function markSessionValid() {
+  sessionValidUntil = Date.now() + SESSION_CACHE_TTL_MS;
+}
+
+function isSessionCacheFresh() {
+  return sessionValidUntil > Date.now();
+}
 
 router.beforeEach(async (to, from) => {
   const requiresAuth = to.matched.some((record) => Boolean(record.meta?.requiresAuth));
   const guestOnly = to.matched.some((record) => Boolean(record.meta?.guestOnly));
 
-  const token = localStorage.getItem("astro_access_token") || localStorage.getItem("astro_token");
-
   if (!requiresAuth && !guestOnly) {
     return true;
   }
 
+  const token = localStorage.getItem("astro_access_token") || localStorage.getItem("astro_token");
+
   let loggedIn = false;
   if (token) {
-    if (!sessionChecked) {
+    if (isSessionCacheFresh()) {
+      loggedIn = true;
+    } else {
       try {
         loggedIn = await ensureSession();
-        sessionChecked = true;
-        sessionValid = loggedIn;
+        if (loggedIn) {
+          markSessionValid();
+        } else {
+          sessionValidUntil = 0;
+        }
       } catch {
         loggedIn = false;
-        sessionChecked = true;
-        sessionValid = false;
+        sessionValidUntil = 0;
       }
-    } else {
-      loggedIn = sessionValid;
     }
   }
 
@@ -128,8 +140,7 @@ router.beforeEach(async (to, from) => {
 });
 
 export function resetSessionCache() {
-  sessionChecked = false;
-  sessionValid = false;
+  sessionValidUntil = 0;
 }
 
 export default router;

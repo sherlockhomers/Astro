@@ -4,10 +4,15 @@ from pathlib import Path
 
 from fastapi import APIRouter, Depends, File, HTTPException, Response, UploadFile
 from fastapi.responses import FileResponse, RedirectResponse
+from pydantic import BaseModel, Field
 
 from app.config import settings
-from app.deps import ServiceContainer, get_services
+from app.deps import ServiceContainer, get_services, optional_user
 from app.routers._helpers import ensure_gallery_images, normalize_milvus_status, image_placeholder_svg
+
+
+class IndexTriggerRequest(BaseModel):
+    force: bool = Field(default=False, description="忽略已索引状态，强制重建")
 
 router = APIRouter(prefix="/api/v1/image", tags=["image"])
 
@@ -82,8 +87,15 @@ def image_index_status(svc: ServiceContainer = Depends(get_services)) -> dict:
 
 
 @router.post("/index-trigger")
-def image_index_trigger(force: bool = False, svc: ServiceContainer = Depends(get_services)) -> dict:
-    accepted, message = svc.milvus_index.start(force=force, csv_root=settings.csv_root)
+def image_index_trigger(
+    payload: IndexTriggerRequest | None = None,
+    force: bool | None = None,
+    svc: ServiceContainer = Depends(get_services),
+    _user: dict | None = Depends(optional_user),
+) -> dict:
+    # 新客户端用 body，老客户端还在用 ?force=... 的 query 参数，两个都收
+    effective_force = bool(payload.force) if payload is not None else bool(force)
+    accepted, message = svc.milvus_index.start(force=effective_force, csv_root=settings.csv_root)
     return {"accepted": accepted, "message": message, "status": svc.milvus_index.status()}
 
 
