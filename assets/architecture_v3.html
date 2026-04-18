@@ -1,0 +1,405 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<title>星智穹图 · 系统架构 v3</title>
+<!-- 这份架构图专门做成和 PPT 深蓝背景融合的样式。
+     打开浏览器双击本文件预览；导出 PNG 可用浏览器开发者工具的 "Capture screenshot"，
+     或者 Windows 截图工具 / QQ 截屏 直接框选。 -->
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  html, body {
+    /* PPT 背景就是这个色调，保持一致 */
+    background: #0b1e3a;
+    font-family: "PingFang SC", "Microsoft YaHei UI", "Microsoft YaHei", "Noto Sans CJK SC", "Source Han Sans", "Segoe UI", system-ui, sans-serif;
+    color: #e2e8f0;
+    min-height: 100%;
+  }
+
+  .page {
+    max-width: 1400px;
+    margin: 0 auto;
+    padding: 44px 52px 52px;
+  }
+
+  .title-bar {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 18px;
+  }
+
+  .chevrons {
+    color: #38bdf8;
+    font-size: 26px;
+    font-weight: 800;
+    letter-spacing: -3px;
+  }
+
+  .title {
+    font-size: 30px;
+    font-weight: 700;
+    letter-spacing: 3px;
+    color: #f1f5f9;
+  }
+
+  .sub-hint {
+    margin-left: auto;
+    font-size: 12px;
+    color: #7fa0c9;
+    letter-spacing: 0.5px;
+    font-family: "JetBrains Mono", "Space Mono", Consolas, monospace;
+  }
+
+  /* ── 架构面板整体 ────────────────────────────────── */
+
+  .arch-grid {
+    display: grid;
+    grid-template-columns: 1fr 220px;
+    gap: 16px;
+    padding: 24px;
+    background: linear-gradient(180deg, rgba(15, 36, 68, 0.75), rgba(6, 18, 36, 0.85));
+    border: 1px solid rgba(96, 165, 250, 0.22);
+    border-radius: 10px;
+    box-shadow:
+      inset 0 0 0 1px rgba(255, 255, 255, 0.03),
+      0 20px 60px -20px rgba(0, 0, 0, 0.7);
+  }
+
+  .layers {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+  }
+
+  /* ── 每一层的盒子 ────────────────────────────────── */
+
+  .layer {
+    position: relative;
+    display: grid;
+    grid-template-columns: 148px 1fr;
+    align-items: stretch;
+    gap: 16px;
+    padding: 14px 16px;
+    background: rgba(12, 28, 52, 0.75);
+    border: 1px solid rgba(96, 165, 250, 0.18);
+    border-radius: 8px;
+  }
+
+  .layer::before {
+    content: "";
+    position: absolute;
+    left: 0;
+    top: 10%;
+    bottom: 10%;
+    width: 3px;
+    border-radius: 3px;
+    background: var(--accent, #13d2b8);
+  }
+
+  .layer-head {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 3px;
+    padding-left: 8px;
+  }
+
+  .layer-name {
+    font-size: 15px;
+    font-weight: 700;
+    color: #f1f5f9;
+    letter-spacing: 0.5px;
+  }
+
+  .layer-sub {
+    font-size: 10.5px;
+    color: #94a3b8;
+    letter-spacing: 0.5px;
+    font-family: "JetBrains Mono", "Space Mono", Consolas, monospace;
+  }
+
+  .chip-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    align-items: center;
+  }
+
+  .chip {
+    padding: 6px 14px;
+    border-radius: 4px;
+    font-size: 12.5px;
+    color: #e2e8f0;
+    background: rgba(6, 16, 34, 0.55);
+    border: 1px solid rgba(255, 255, 255, 0.09);
+    transition: none;
+    letter-spacing: 0.2px;
+    white-space: nowrap;
+  }
+
+  .chip.accent {
+    background: rgba(19, 210, 184, 0.1);
+    border-color: rgba(19, 210, 184, 0.35);
+    color: #a7f3d9;
+  }
+
+  .chip.blue {
+    background: rgba(59, 130, 246, 0.12);
+    border-color: rgba(59, 130, 246, 0.36);
+    color: #93c5fd;
+  }
+
+  .chip.amber {
+    background: rgba(245, 158, 11, 0.1);
+    border-color: rgba(245, 158, 11, 0.36);
+    color: #fcd34d;
+  }
+
+  /* 各层主题色 */
+  .layer.user      { --accent: #a78bfa; }
+  .layer.frontend  { --accent: #60a5fa; }
+  .layer.gateway   { --accent: #38bdf8; }
+  .layer.service   { --accent: #13d2b8; }
+  .layer.ai        { --accent: #fbbf24; }
+  .layer.data      { --accent: #f472b6; }
+
+  /* ── 右侧"模型 & 基建"栏 ───────────────────────── */
+
+  .aside {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+  }
+
+  .aside-box {
+    background: rgba(12, 28, 52, 0.75);
+    border: 1px solid rgba(96, 165, 250, 0.18);
+    border-radius: 8px;
+    padding: 12px 14px 12px;
+  }
+
+  .aside-title {
+    font-size: 11px;
+    letter-spacing: 2px;
+    color: #7fa0c9;
+    font-family: "JetBrains Mono", "Space Mono", Consolas, monospace;
+    margin-bottom: 8px;
+  }
+
+  .aside-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 5px 0;
+    font-size: 12px;
+    color: #cbd5e1;
+    border-bottom: 1px dashed rgba(96, 165, 250, 0.15);
+  }
+
+  .aside-row:last-child {
+    border-bottom: none;
+  }
+
+  .aside-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--dot, #94a3b8);
+    flex-shrink: 0;
+  }
+
+  /* ── 底部走标 ───────────────────────────────────── */
+
+  .baseline {
+    margin-top: 22px;
+    padding: 14px 20px;
+    background: rgba(12, 28, 52, 0.55);
+    border: 1px solid rgba(96, 165, 250, 0.18);
+    border-left: 4px solid #13d2b8;
+    border-radius: 6px;
+    font-size: 13.5px;
+    color: #cbd5e1;
+    letter-spacing: 0.3px;
+  }
+
+  .baseline strong {
+    color: #fbbf24;
+    font-weight: 600;
+  }
+
+  .baseline em {
+    color: #13d2b8;
+    font-style: normal;
+    font-weight: 600;
+  }
+
+  /* 打印导出时去除阴影保留清晰度 */
+  @media print {
+    body { background: #0b1e3a !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    .arch-grid { box-shadow: none; }
+  }
+</style>
+</head>
+<body>
+<div class="page">
+  <div class="title-bar">
+    <span class="chevrons">&gt;&gt;&gt;</span>
+    <span class="title">系统架构</span>
+    <span class="sub-hint">AstroVista · 分层架构 · v3</span>
+  </div>
+
+  <div class="arch-grid">
+    <!-- ── 左侧主架构 6 层 ──────────────────────────── -->
+    <div class="layers">
+
+      <!-- 1 用户层 -->
+      <div class="layer user">
+        <div class="layer-head">
+          <div class="layer-name">用户层</div>
+          <div class="layer-sub">USERS / CLIENTS</div>
+        </div>
+        <div class="chip-row">
+          <span class="chip">Web 浏览器</span>
+          <span class="chip">响应式移动端</span>
+          <span class="chip">外部 API 调用</span>
+        </div>
+      </div>
+
+      <!-- 2 前端展示层 -->
+      <div class="layer frontend">
+        <div class="layer-head">
+          <div class="layer-name">前端展示层</div>
+          <div class="layer-sub">PRESENTATION</div>
+        </div>
+        <div class="chip-row">
+          <span class="chip blue">Vue 3 · Vite</span>
+          <span class="chip blue">TypeScript</span>
+          <span class="chip">Element Plus</span>
+          <span class="chip">Pinia</span>
+          <span class="chip">ECharts</span>
+          <span class="chip">Three.js</span>
+          <span class="chip">Aladin Lite</span>
+          <span class="chip">Marked</span>
+        </div>
+      </div>
+
+      <!-- 3 API 网关层 -->
+      <div class="layer gateway">
+        <div class="layer-head">
+          <div class="layer-name">API 网关层</div>
+          <div class="layer-sub">GATEWAY / AUTH</div>
+        </div>
+        <div class="chip-row">
+          <span class="chip accent">FastAPI</span>
+          <span class="chip">CORS</span>
+          <span class="chip">JWT 鉴权</span>
+          <span class="chip">Refresh Token</span>
+          <span class="chip">登录锁定</span>
+          <span class="chip">限流</span>
+          <span class="chip">SSE 流式推送</span>
+        </div>
+      </div>
+
+      <!-- 4 业务服务层 -->
+      <div class="layer service">
+        <div class="layer-head">
+          <div class="layer-name">业务服务层</div>
+          <div class="layer-sub">DOMAIN SERVICES</div>
+        </div>
+        <div class="chip-row">
+          <span class="chip accent">智能问答</span>
+          <span class="chip accent">知识图谱</span>
+          <span class="chip accent">图像检索</span>
+          <span class="chip accent">混合检索</span>
+          <span class="chip accent">天文计算工具</span>
+          <span class="chip">个性化推荐</span>
+          <span class="chip">实时天象事件</span>
+          <span class="chip">用户 / 收藏</span>
+          <span class="chip">Landing 聚合</span>
+        </div>
+      </div>
+
+      <!-- 5 AI 引擎层 -->
+      <div class="layer ai">
+        <div class="layer-head">
+          <div class="layer-name">AI 引擎层</div>
+          <div class="layer-sub">REASONING &amp; MODELS</div>
+        </div>
+        <div class="chip-row">
+          <span class="chip amber">自适应 RAG Agent</span>
+          <span class="chip amber">GraphRAG</span>
+          <span class="chip">事实护栏 · 热重载</span>
+          <span class="chip">疑问类型感知</span>
+          <span class="chip">Sentence Transformers</span>
+          <span class="chip">BM25</span>
+          <span class="chip">CLIP ViT-B/32</span>
+        </div>
+      </div>
+
+      <!-- 6 数据存储层 -->
+      <div class="layer data">
+        <div class="layer-head">
+          <div class="layer-name">数据存储层</div>
+          <div class="layer-sub">STORAGE</div>
+        </div>
+        <div class="chip-row">
+          <span class="chip">SQLite · WAL</span>
+          <span class="chip">Neo4j 图数据库</span>
+          <span class="chip">Milvus 向量库</span>
+          <span class="chip">MinIO 对象存储</span>
+          <span class="chip">Redis 缓存</span>
+          <span class="chip">JSONL 规则库</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── 右侧：本地大模型 / 云端 LLM / 外部数据源 / 部署 ── -->
+    <div class="aside">
+
+      <div class="aside-box">
+        <div class="aside-title">本地大模型</div>
+        <div class="aside-row"><span class="aside-dot" style="--dot:#fbbf24"></span>AstroSage-8B 文本</div>
+        <div class="aside-row"><span class="aside-dot" style="--dot:#fbbf24"></span>AstroLLaVA 多模态</div>
+        <div class="aside-row"><span class="aside-dot" style="--dot:#fbbf24"></span>StarWhisper-3 对话</div>
+        <div class="aside-row"><span class="aside-dot" style="--dot:#fbbf24"></span>Spectrum-Captioner</div>
+        <div class="aside-row"><span class="aside-dot" style="--dot:#fbbf24"></span>NLLB-200 中英互译</div>
+      </div>
+
+      <div class="aside-box">
+        <div class="aside-title">云端增强</div>
+        <div class="aside-row"><span class="aside-dot" style="--dot:#13d2b8"></span>GPT-4o-mini</div>
+        <div class="aside-row"><span class="aside-dot" style="--dot:#13d2b8"></span>质量低时自动回退</div>
+      </div>
+
+      <div class="aside-box">
+        <div class="aside-title">外部实时数据</div>
+        <div class="aside-row"><span class="aside-dot" style="--dot:#60a5fa"></span>NASA APOD</div>
+        <div class="aside-row"><span class="aside-dot" style="--dot:#60a5fa"></span>NASA NeoWs</div>
+        <div class="aside-row"><span class="aside-dot" style="--dot:#60a5fa"></span>NASA Exoplanet Archive</div>
+        <div class="aside-row"><span class="aside-dot" style="--dot:#60a5fa"></span>arXiv Astro-ph</div>
+        <div class="aside-row"><span class="aside-dot" style="--dot:#60a5fa"></span>GCN Circulars</div>
+        <div class="aside-row"><span class="aside-dot" style="--dot:#60a5fa"></span>CDS Aladin 巡天</div>
+      </div>
+
+      <div class="aside-box">
+        <div class="aside-title">部署与 CI</div>
+        <div class="aside-row"><span class="aside-dot" style="--dot:#a78bfa"></span>Docker Compose</div>
+        <div class="aside-row"><span class="aside-dot" style="--dot:#a78bfa"></span>GitHub Actions</div>
+        <div class="aside-row"><span class="aside-dot" style="--dot:#a78bfa"></span>pre-commit 代码规范</div>
+        <div class="aside-row"><span class="aside-dot" style="--dot:#a78bfa"></span>ruff · ESLint · Prettier</div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="baseline">
+    基于 <strong>Vue 3 + FastAPI</strong> 的六层分层架构，
+    集成 <em>Neo4j / Milvus / CLIP / AstroSage-8B / AstroLLaVA</em>，
+    由 <em>自适应 RAG Agent</em> 编排多条检索与推理路径，
+    <strong>Docker Compose</strong> 一键部署。
+  </div>
+</div>
+</body>
+</html>
