@@ -317,6 +317,226 @@ def planet_visibility(
     )
 
 
+# ────────────────────────────────────────────────────────────────────────────
+# 「今夜曲线」和「7 天窗口」—— 给前端画图用
+#
+# 思路：复用 planet_visibility 的核心计算，循环采样出一串点。
+# 今夜：从当天 18:00 本地时间起算，每 30 分钟一个采样点，采 12 小时共 25 个点
+# 一周：每天 18:00 到次日 06:00 取 12 个点，找出峰值 / 可见总时长 / 最佳观测窗口
+
+
+@dataclass
+class AltitudeSample:
+    time_utc: str        # ISO UTC
+    time_local: str      # "HH:MM" 方便前端画 x 轴
+    altitude_deg: float
+    azimuth_deg: float
+    visible: bool        # 高度 > 5° 才算勉强能看
+
+
+@dataclass
+class TonightCurve:
+    date: str
+    location_label: str
+    samples: list[AltitudeSample]
+    peak_altitude: float
+    peak_time_local: str
+    rise_time_local: str | None   # 地平线上升时刻（线性插值估）
+    set_time_local: str | None    # 落下时刻
+    visible_minutes: int          # 这一夜累计能看到（alt>5）的分钟数
+
+
+@dataclass
+class DaySummary:
+    date: str
+    peak_altitude: float
+    peak_time_local: str
+    visible_minutes: int
+    quality: str                  # "great" / "good" / "ok" / "poor"
+
+
+def _quality_label(visible_minutes: int, peak_alt: float) -> str:
+    if peak_alt >= 45 and visible_minutes >= 240:
+        return "great"
+    if peak_alt >= 25 and visible_minutes >= 120:
+        return "good"
+    if peak_alt >= 10 and visible_minutes >= 60:
+        return "ok"
+    return "poor"
+
+
+def _sample_altitude_at(planet_key: str, dt_utc: datetime, lat: float, lon: float) -> tuple[float, float]:
+    # 小版本的 planet_visibility 核心计算：只吐 (alt, az)
+    days = _days_since_j2000(dt_utc)
+    earth = _planet_heliocentric("earth", days)
+    planet = _planet_heliocentric(planet_key, days)
+    gx, gy, gz = planet[0] - earth[0], planet[1] - earth[1], planet[2] - earth[2]
+    xe, ye, ze = _ecliptic_to_equatorial(gx, gy, gz)
+    ra = math.atan2(ye, xe) % (2 * math.pi)
+    dec = math.asin(ze / math.sqrt(xe * xe + ye * ye + ze * ze))
+    lst = _local_sidereal_time(dt_utc, lon)
+    alt, az = _equatorial_to_alt_az(ra, dec, _deg_to_rad(lat), lst)
+    return _rad_to_deg(alt), _rad_to_deg(az)
+
+
+def _to_local_hhmm(dt_utc: datetime, tz_offset_hours: float = 8.0) -> str:
+    # 中国用户几乎都是 UTC+8；后端目前不维护时区表，先按 UTC+8 转；以后再按地理位置推
+    local = dt_utc + timedelta(hours=tz_offset_hours)
+    return local.strftime("%H:%M")
+
+
+def _interpolate_zero_cross(
+    samples: list[AltitudeSample],
+    direction: str,  # "up" 找升起，"down" 找落下
+) -> str | None:
+    # 在相邻两个采样里，找 altitude 从负到正（升起）或从正到负（落下）的交叉点，线性插值
+    for i in range(len(samples) - 1):
+        a, b = samples[i], samples[i + 1]
+        if direction == "up" and a.altitude_deg < 0 <= b.altitude_deg:
+            return _interp_time(a, b)
+        if direction == "down" and a.altitude_deg >= 0 > b.altitude_deg:
+            return _interp_time(a, b)
+    return None
+
+
+def _interp_time(a: AltitudeSample, b: AltitudeSample) -> str:
+    # 按 alt 线性插值找 0 穿越点的时间
+    if b.altitude_deg == a.altitude_deg:
+        return a.time_local
+    t = -a.altitude_deg / (b.altitude_deg - a.altitude_deg)
+    t = max(0.0, min(1.0, t))
+    # 从 time_local "HH:MM" 解析出分钟数
+    def _to_min(s: str) -> int:
+        hh, mm = s.split(":")
+        return int(hh) * 60 + int(mm)
+    m_a, m_b = _to_min(a.time_local), _to_min(b.time_local)
+    # 如果跨天（比如 23:30 -> 00:30），m_b 会小于 m_a，要加 24 小时
+    if m_b < m_a:
+        m_b += 24 * 60
+    mid = m_a + int((m_b - m_a) * t)
+    mid %= 24 * 60
+    return f"{mid // 60:02d}:{mid % 60:02d}"
+
+
+def planet_tonight_curve(
+    name: str,
+    latitude: float | None = None,
+    longitude: float | None = None,
+    city: str | None = None,
+    base_dt: datetime | None = None,
+    tz_offset_hours: float = 8.0,
+) -> TonightCurve | None:
+    key = _PLANET_ALIASES.get((name or "").strip().lower())
+    if key is None or key == "earth":
+        return None
+
+    if base_dt is None:
+        base_dt = datetime.now(timezone.utc)
+    if base_dt.tzinfo is None:
+        base_dt = base_dt.replace(tzinfo=timezone.utc)
+
+    if latitude is None or longitude is None:
+        city_key = (city or "北京").strip()
+        lat_lon = _CITY_COORDS.get(city_key, _CITY_COORDS["北京"])
+        latitude, longitude = lat_lon
+        loc_label = city_key
+    else:
+        loc_label = f"{latitude:.2f}°N, {longitude:.2f}°E"
+
+    # 以本地时间的今天 18:00 为起点，往后 12 小时，每 30 分钟一个采样
+    local_now = base_dt + timedelta(hours=tz_offset_hours)
+    local_start = local_now.replace(hour=18, minute=0, second=0, microsecond=0)
+    start_utc = (local_start - timedelta(hours=tz_offset_hours)).replace(tzinfo=timezone.utc)
+
+    samples: list[AltitudeSample] = []
+    peak_alt = -999.0
+    peak_time_local = ""
+    visible_minutes = 0
+
+    for i in range(25):  # 12 小时，每半小时一个点
+        t = start_utc + timedelta(minutes=30 * i)
+        alt, az = _sample_altitude_at(key, t, latitude, longitude)
+        local_hhmm = _to_local_hhmm(t, tz_offset_hours)
+        visible = alt > 5
+        samples.append(AltitudeSample(
+            time_utc=t.isoformat(),
+            time_local=local_hhmm,
+            altitude_deg=round(alt, 2),
+            azimuth_deg=round(az, 2),
+            visible=visible,
+        ))
+        if visible:
+            visible_minutes += 30
+        if alt > peak_alt:
+            peak_alt = alt
+            peak_time_local = local_hhmm
+
+    return TonightCurve(
+        date=local_start.strftime("%Y-%m-%d"),
+        location_label=loc_label,
+        samples=samples,
+        peak_altitude=round(peak_alt, 2),
+        peak_time_local=peak_time_local,
+        rise_time_local=_interpolate_zero_cross(samples, "up"),
+        set_time_local=_interpolate_zero_cross(samples, "down"),
+        visible_minutes=visible_minutes,
+    )
+
+
+def planet_week_forecast(
+    name: str,
+    latitude: float | None = None,
+    longitude: float | None = None,
+    city: str | None = None,
+    base_dt: datetime | None = None,
+    tz_offset_hours: float = 8.0,
+    days: int = 7,
+) -> list[DaySummary] | None:
+    key = _PLANET_ALIASES.get((name or "").strip().lower())
+    if key is None or key == "earth":
+        return None
+
+    if base_dt is None:
+        base_dt = datetime.now(timezone.utc)
+    if base_dt.tzinfo is None:
+        base_dt = base_dt.replace(tzinfo=timezone.utc)
+
+    if latitude is None or longitude is None:
+        lat_lon = _CITY_COORDS.get((city or "北京").strip(), _CITY_COORDS["北京"])
+        latitude, longitude = lat_lon
+
+    summaries: list[DaySummary] = []
+    local_base = base_dt + timedelta(hours=tz_offset_hours)
+
+    for day_offset in range(max(1, min(days, 14))):
+        target_local_date = local_base.date() + timedelta(days=day_offset)
+        local_start = datetime.combine(target_local_date, datetime.min.time()).replace(hour=18)
+        start_utc = (local_start - timedelta(hours=tz_offset_hours)).replace(tzinfo=timezone.utc)
+
+        peak_alt = -999.0
+        peak_time_local = ""
+        visible_minutes = 0
+        # 每小时采样一次，12 小时共 13 个点，够判窗口
+        for i in range(13):
+            t = start_utc + timedelta(hours=i)
+            alt, _az = _sample_altitude_at(key, t, latitude, longitude)
+            if alt > peak_alt:
+                peak_alt = alt
+                peak_time_local = _to_local_hhmm(t, tz_offset_hours)
+            if alt > 5:
+                visible_minutes += 60
+
+        summaries.append(DaySummary(
+            date=target_local_date.strftime("%Y-%m-%d"),
+            peak_altitude=round(peak_alt, 2),
+            peak_time_local=peak_time_local,
+            visible_minutes=visible_minutes,
+            quality=_quality_label(visible_minutes, peak_alt),
+        ))
+
+    return summaries
+
+
 def _visibility_advice(alt_deg: float, az_deg: float, planet_key: str) -> str:
     if alt_deg <= 0:
         return "此时在地平线以下，看不到。一般需等几个小时后再观察。"

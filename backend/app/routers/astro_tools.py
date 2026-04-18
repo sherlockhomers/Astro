@@ -12,7 +12,9 @@ from pydantic import BaseModel, Field
 from app.services.astro_tools_service import (
     convert_coord,
     moon_phase,
+    planet_tonight_curve,
     planet_visibility,
+    planet_week_forecast,
     tool_catalog,
 )
 
@@ -98,6 +100,77 @@ def api_planet_visibility(payload: PlanetVisibilityQuery) -> dict[str, Any]:
             f"位于{result.azimuth_label}方向，地平高度 {result.altitude_deg}°，"
             f"距离 {result.distance_au} AU。{result.advice}"
         ),
+    }
+
+
+class PlanetScheduleQuery(BaseModel):
+    planet: str = Field(..., description="行星中英文名")
+    city: str | None = None
+    latitude: float | None = None
+    longitude: float | None = None
+    datetime_iso: str | None = Field(default=None, description="参考时间；不给就用当前")
+    days: int = Field(default=7, ge=1, le=14, description="未来几天，默认 7")
+    tz_offset_hours: float = Field(default=8.0, description="本地时区偏移，中国默认 UTC+8")
+
+
+def _sample_to_dict(s) -> dict[str, Any]:
+    return {
+        "time_utc": s.time_utc,
+        "time_local": s.time_local,
+        "altitude_deg": s.altitude_deg,
+        "azimuth_deg": s.azimuth_deg,
+        "visible": s.visible,
+    }
+
+
+@router.post("/planet-schedule")
+def api_planet_schedule(payload: PlanetScheduleQuery) -> dict[str, Any]:
+    # 一次返回"今夜曲线 + 未来一周窗口"，前端一个接口拿齐所有画图数据
+    dt = _parse_datetime(payload.datetime_iso)
+    tonight = planet_tonight_curve(
+        name=payload.planet,
+        latitude=payload.latitude,
+        longitude=payload.longitude,
+        city=payload.city,
+        base_dt=dt,
+        tz_offset_hours=payload.tz_offset_hours,
+    )
+    if tonight is None:
+        raise HTTPException(status_code=400, detail="行星名不认识，支持：水星/金星/火星/木星/土星/天王星/海王星")
+
+    week = planet_week_forecast(
+        name=payload.planet,
+        latitude=payload.latitude,
+        longitude=payload.longitude,
+        city=payload.city,
+        base_dt=dt,
+        tz_offset_hours=payload.tz_offset_hours,
+        days=payload.days,
+    ) or []
+
+    return {
+        "ok": True,
+        "planet": payload.planet,
+        "location": tonight.location_label,
+        "tonight": {
+            "date": tonight.date,
+            "samples": [_sample_to_dict(s) for s in tonight.samples],
+            "peak_altitude": tonight.peak_altitude,
+            "peak_time_local": tonight.peak_time_local,
+            "rise_time_local": tonight.rise_time_local,
+            "set_time_local": tonight.set_time_local,
+            "visible_minutes": tonight.visible_minutes,
+        },
+        "week": [
+            {
+                "date": d.date,
+                "peak_altitude": d.peak_altitude,
+                "peak_time_local": d.peak_time_local,
+                "visible_minutes": d.visible_minutes,
+                "quality": d.quality,
+            }
+            for d in week
+        ],
     }
 
 

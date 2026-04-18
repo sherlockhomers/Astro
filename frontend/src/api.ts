@@ -213,6 +213,21 @@ export async function callCoordConvert(params: {
   return data;
 }
 
+export async function callPlanetSchedule(params: {
+  planet: string;
+  city?: string;
+  latitude?: number;
+  longitude?: number;
+  datetime_iso?: string;
+  days?: number;
+}) {
+  const { data } = await api.post("/api/v1/astro-tools/planet-schedule", {
+    ...params,
+    days: params.days ?? 7
+  });
+  return data;
+}
+
 // ── 个性化推荐路径（创新 F）────────────────────────
 export async function getRecommendPath() {
   const { data } = await api.get("/api/v1/user/recommend-path");

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from "vue";
+import { defineAsyncComponent, ref } from "vue";
 import { ElMessage } from "element-plus";
 import { Calculator, Moon, Telescope, Compass, MapPin, Loader2, AlertCircle, Plug } from "lucide-vue-next";
 import {
@@ -8,6 +8,9 @@ import {
   callPlanetVisibility,
   getAstroToolCatalog
 } from "../../api";
+
+// 大件异步加载，首次进"今晚看什么"时按需拉
+const PlanetSchedule = defineAsyncComponent(() => import("../../components/PlanetSchedule.vue"));
 
 type ActiveTool = "moon" | "planet" | "coord";
 
@@ -234,6 +237,15 @@ function switchTool(t: ActiveTool) {
           </div>
         </div>
       </div>
+
+      <!-- 今夜高度曲线 + 未来 7 天窗口。跟着当前选中的 planet/city 变化，
+           数据拿到后自动画图，空白区终于不再空白。 -->
+      <PlanetSchedule
+        v-if="planetResult"
+        :planet="planetName"
+        :city="planetCity || '北京'"
+        class="planet-schedule-wrap"
+      />
     </section>
 
     <!-- 月相 -->
@@ -665,5 +677,9 @@ function switchTool(t: ActiveTool) {
   font-size: 11.5px;
   line-height: 1.5;
   border-radius: 2px;
+}
+
+.planet-schedule-wrap {
+  margin-top: 12px;
 }
 </style>
