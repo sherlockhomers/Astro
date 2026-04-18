@@ -283,7 +283,7 @@ onMounted(() => {
         <div v-if="pathLoading" class="path-loading">正在沿着知识图谱走一遍...</div>
         <div v-else-if="pathCards.length" class="path-grid">
           <button
-            v-for="(card, idx) in pathCards"
+            v-for="(card, idx) in pathCards.slice(0, 6)"
             :key="card.name + idx"
             class="path-card"
             @click="openPathCard(card)"
@@ -765,10 +765,23 @@ onMounted(() => {
 }
 
 .path-grid {
-  padding: 16px 20px 20px;
+  padding: 14px 20px 16px;
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
-  gap: 12px;
+  /* 固定 6 列，只显示一行卡片，后面的剪掉不展示，让"问答历史"能往上顶 */
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 10px;
+}
+
+@media (max-width: 1180px) {
+  .path-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 760px) {
+  .path-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 
 .path-card {

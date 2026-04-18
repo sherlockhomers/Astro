@@ -60,6 +60,10 @@ frontend/logs/
 *.pdf
 ppt_content.txt
 
+# 个人录屏 / 演示相关文档，留本地自己用，不进公开仓库
+docs/演示视频*.md
+docs/录屏*.md
+
 # 临时文件
 tmp/
 .tmp/
