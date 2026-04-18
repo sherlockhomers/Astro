@@ -1,0 +1,448 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<title>星智穹图 · 系统架构（透明版）</title>
+<!--
+  这一版是**透明背景**的架构图。用法非常简单：
+  1. 浏览器双击本文件打开
+  2. 点右上角【导出透明 PNG】按钮 → 会自动下载一张带 alpha 通道的 PNG
+  3. PPT 里右键粘贴或插入图片 → 后面你 PPT 的渐变背景会自然透过来
+
+  页面里的方格棋盘纹路**只是在浏览器里让你看清图有多大**，
+  它不会出现在导出的 PNG 里。
+-->
+<script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  html, body {
+    min-height: 100%;
+    /* 棋盘格底：只是为了预览时看得清，导出时忽略 */
+    background-color: #1a2738;
+    background-image:
+      linear-gradient(45deg, rgba(255,255,255,0.04) 25%, transparent 25%),
+      linear-gradient(-45deg, rgba(255,255,255,0.04) 25%, transparent 25%),
+      linear-gradient(45deg, transparent 75%, rgba(255,255,255,0.04) 75%),
+      linear-gradient(-45deg, transparent 75%, rgba(255,255,255,0.04) 75%);
+    background-size: 18px 18px;
+    background-position: 0 0, 0 9px, 9px -9px, -9px 0px;
+    font-family: "PingFang SC", "Microsoft YaHei UI", "Microsoft YaHei",
+                 "Noto Sans CJK SC", "Source Han Sans", "Segoe UI", system-ui, sans-serif;
+    color: #f1f5f9;
+  }
+
+  .toolbar {
+    position: fixed;
+    top: 16px;
+    right: 16px;
+    z-index: 100;
+    display: flex;
+    gap: 8px;
+  }
+
+  .btn {
+    padding: 10px 18px;
+    background: #13d2b8;
+    color: #041822;
+    border: none;
+    border-radius: 4px;
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    cursor: pointer;
+    box-shadow: 0 6px 16px rgba(19, 210, 184, 0.35);
+    transition: transform 0.15s;
+  }
+  .btn:hover { transform: translateY(-1px); }
+  .btn:disabled { opacity: 0.6; cursor: not-allowed; }
+
+  .btn.ghost {
+    background: rgba(255, 255, 255, 0.1);
+    color: #e2e8f0;
+    box-shadow: none;
+  }
+
+  .tip {
+    position: fixed;
+    top: 70px;
+    right: 16px;
+    padding: 8px 12px;
+    background: rgba(0, 0, 0, 0.45);
+    color: #cbd5e1;
+    font-size: 11.5px;
+    border-radius: 4px;
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    letter-spacing: 0.3px;
+    max-width: 260px;
+    line-height: 1.5;
+    display: none;
+  }
+
+  .toolbar:hover ~ .tip,
+  .tip.show { display: block; }
+
+  /* ── 架构主区 ──────────────────────────────── */
+  /* 注意：这个 .capture-area 就是导出 PNG 的目标区域，backgroundColor 设为 null 就是透明 */
+
+  .capture-area {
+    padding: 40px 56px 44px;
+    background: transparent;
+  }
+
+  /* 标题 */
+  .title-bar {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    margin-bottom: 24px;
+  }
+  .chevrons {
+    color: #7dd3fc;
+    font-size: 28px;
+    font-weight: 800;
+    letter-spacing: -4px;
+  }
+  .title {
+    font-size: 30px;
+    font-weight: 700;
+    letter-spacing: 4px;
+    color: #fff;
+  }
+
+  .arch-grid {
+    display: grid;
+    grid-template-columns: 1fr 220px;
+    gap: 18px;
+  }
+
+  .layers {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  /* 每一层：用半透明彩色块做层底，贴到任何背景上都自然 */
+  .layer {
+    position: relative;
+    display: grid;
+    grid-template-columns: 140px 1fr;
+    align-items: center;
+    gap: 16px;
+    padding: 14px 18px 14px 22px;
+    border-radius: 8px;
+  }
+
+  .layer::before {
+    content: "";
+    position: absolute;
+    left: 8px;
+    top: 12%;
+    bottom: 12%;
+    width: 3px;
+    border-radius: 3px;
+    background: var(--accent);
+  }
+
+  .layer-head {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+  .layer-name {
+    font-size: 15px;
+    font-weight: 700;
+    color: #ffffff;
+    letter-spacing: 0.8px;
+  }
+  .layer-sub {
+    font-size: 10.5px;
+    color: rgba(255, 255, 255, 0.6);
+    letter-spacing: 1.5px;
+    font-family: "JetBrains Mono", "Space Mono", Consolas, monospace;
+  }
+
+  .chip-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 7px;
+  }
+
+  .chip {
+    padding: 5px 11px;
+    font-size: 12px;
+    color: #fff;
+    border-radius: 3px;
+    white-space: nowrap;
+    letter-spacing: 0.3px;
+    background: rgba(255, 255, 255, 0.14);
+    border: 1px solid rgba(255, 255, 255, 0.28);
+  }
+
+  /* 每层的主题色：整层背景用对应颜色的 rgba 半透明填充 */
+  .layer.user      { background: rgba(167, 139, 250, 0.18); border: 1px solid rgba(167, 139, 250, 0.35); --accent: #c4b5fd; }
+  .layer.frontend  { background: rgba(96, 165, 250, 0.18);  border: 1px solid rgba(96, 165, 250, 0.35);  --accent: #7dd3fc; }
+  .layer.gateway   { background: rgba(56, 189, 248, 0.18);  border: 1px solid rgba(56, 189, 248, 0.35);  --accent: #38bdf8; }
+  .layer.service   { background: rgba(19, 210, 184, 0.15);  border: 1px solid rgba(19, 210, 184, 0.35);  --accent: #6ee7d7; }
+  .layer.ai        { background: rgba(251, 191, 36, 0.15);  border: 1px solid rgba(251, 191, 36, 0.35);  --accent: #fcd34d; }
+  .layer.data      { background: rgba(244, 114, 182, 0.15); border: 1px solid rgba(244, 114, 182, 0.35); --accent: #f9a8d4; }
+
+  /* ── 右侧辅栏 ──────────────────────────────── */
+
+  .aside {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+  .aside-box {
+    padding: 12px 14px 10px;
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    border-radius: 8px;
+  }
+  .aside-title {
+    font-size: 10.5px;
+    letter-spacing: 2.5px;
+    color: rgba(255, 255, 255, 0.7);
+    font-family: "JetBrains Mono", "Space Mono", Consolas, monospace;
+    margin-bottom: 7px;
+    padding-bottom: 5px;
+    border-bottom: 1px dashed rgba(255, 255, 255, 0.12);
+  }
+  .aside-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 4px 0;
+    font-size: 11.5px;
+    color: #f1f5f9;
+  }
+  .aside-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--dot, #fff);
+    flex-shrink: 0;
+  }
+
+  /* ── 底部走标 ────────────────────────────── */
+
+  .baseline {
+    margin-top: 22px;
+    padding: 12px 18px;
+    background: rgba(255, 255, 255, 0.05);
+    border-left: 3px solid #7dd3fc;
+    border-radius: 4px;
+    font-size: 14px;
+    color: #fff;
+    letter-spacing: 0.3px;
+  }
+  .baseline strong {
+    color: #fcd34d;
+    font-weight: 600;
+  }
+  .baseline em {
+    color: #6ee7d7;
+    font-style: normal;
+    font-weight: 600;
+  }
+</style>
+</head>
+<body>
+
+<div class="toolbar">
+  <button class="btn" id="download-btn">📥 导出透明 PNG</button>
+  <button class="btn ghost" id="tip-btn">？</button>
+</div>
+<div class="tip" id="tip-box">
+  浏览器里看到的**棋盘格花纹是假的**，只为了让你看清图的边界。<br><br>
+  点上面的按钮下载 PNG 后，PNG 的背景是**完全透明**的。<br><br>
+  把 PNG 粘贴到 PPT 上，下面的 PPT 背景（包括渐变、光斑）会自然透过来。
+</div>
+
+<!-- 这块区域整体会被导出成 PNG -->
+<div id="capture-area" class="capture-area">
+  <div class="title-bar">
+    <span class="chevrons">&gt;&gt;&gt;</span>
+    <span class="title">系统架构</span>
+  </div>
+
+  <div class="arch-grid">
+    <div class="layers">
+
+      <div class="layer user">
+        <div class="layer-head">
+          <div class="layer-name">用户层</div>
+          <div class="layer-sub">USERS</div>
+        </div>
+        <div class="chip-row">
+          <span class="chip">Web 浏览器</span>
+          <span class="chip">响应式移动端</span>
+          <span class="chip">外部 API 调用</span>
+        </div>
+      </div>
+
+      <div class="layer frontend">
+        <div class="layer-head">
+          <div class="layer-name">前端展示层</div>
+          <div class="layer-sub">PRESENTATION</div>
+        </div>
+        <div class="chip-row">
+          <span class="chip">Vue 3 · Vite</span>
+          <span class="chip">TypeScript</span>
+          <span class="chip">Element Plus</span>
+          <span class="chip">Pinia</span>
+          <span class="chip">ECharts</span>
+          <span class="chip">Three.js</span>
+          <span class="chip">Aladin Lite</span>
+          <span class="chip">Marked</span>
+        </div>
+      </div>
+
+      <div class="layer gateway">
+        <div class="layer-head">
+          <div class="layer-name">API 网关层</div>
+          <div class="layer-sub">GATEWAY</div>
+        </div>
+        <div class="chip-row">
+          <span class="chip">FastAPI</span>
+          <span class="chip">CORS</span>
+          <span class="chip">JWT 鉴权</span>
+          <span class="chip">Refresh Token</span>
+          <span class="chip">登录锁定</span>
+          <span class="chip">限流</span>
+          <span class="chip">SSE 流式推送</span>
+        </div>
+      </div>
+
+      <div class="layer service">
+        <div class="layer-head">
+          <div class="layer-name">业务服务层</div>
+          <div class="layer-sub">SERVICES</div>
+        </div>
+        <div class="chip-row">
+          <span class="chip">智能问答</span>
+          <span class="chip">知识图谱</span>
+          <span class="chip">图像检索</span>
+          <span class="chip">混合检索</span>
+          <span class="chip">天文计算工具</span>
+          <span class="chip">个性化推荐</span>
+          <span class="chip">实时天象事件</span>
+          <span class="chip">用户 / 收藏</span>
+          <span class="chip">Landing 聚合</span>
+        </div>
+      </div>
+
+      <div class="layer ai">
+        <div class="layer-head">
+          <div class="layer-name">AI 引擎层</div>
+          <div class="layer-sub">REASONING</div>
+        </div>
+        <div class="chip-row">
+          <span class="chip">自适应 RAG Agent</span>
+          <span class="chip">GraphRAG</span>
+          <span class="chip">事实护栏 · 热重载</span>
+          <span class="chip">疑问类型感知</span>
+          <span class="chip">Sentence Transformers</span>
+          <span class="chip">BM25</span>
+          <span class="chip">CLIP ViT-B/32</span>
+        </div>
+      </div>
+
+      <div class="layer data">
+        <div class="layer-head">
+          <div class="layer-name">数据存储层</div>
+          <div class="layer-sub">STORAGE</div>
+        </div>
+        <div class="chip-row">
+          <span class="chip">SQLite · WAL</span>
+          <span class="chip">Neo4j 图数据库</span>
+          <span class="chip">Milvus 向量库</span>
+          <span class="chip">MinIO 对象存储</span>
+          <span class="chip">Redis 缓存</span>
+          <span class="chip">JSONL 规则库</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="aside">
+
+      <div class="aside-box">
+        <div class="aside-title">本地大模型</div>
+        <div class="aside-row"><span class="aside-dot" style="--dot:#fcd34d"></span>AstroSage-8B 文本</div>
+        <div class="aside-row"><span class="aside-dot" style="--dot:#fcd34d"></span>AstroLLaVA 多模态</div>
+        <div class="aside-row"><span class="aside-dot" style="--dot:#fcd34d"></span>StarWhisper-3 对话</div>
+        <div class="aside-row"><span class="aside-dot" style="--dot:#fcd34d"></span>Spectrum-Captioner</div>
+        <div class="aside-row"><span class="aside-dot" style="--dot:#fcd34d"></span>NLLB-200 中英互译</div>
+      </div>
+
+      <div class="aside-box">
+        <div class="aside-title">云端增强</div>
+        <div class="aside-row"><span class="aside-dot" style="--dot:#6ee7d7"></span>GPT-4o-mini</div>
+        <div class="aside-row"><span class="aside-dot" style="--dot:#6ee7d7"></span>质量低时自动回退</div>
+      </div>
+
+      <div class="aside-box">
+        <div class="aside-title">外部实时数据</div>
+        <div class="aside-row"><span class="aside-dot" style="--dot:#7dd3fc"></span>NASA APOD</div>
+        <div class="aside-row"><span class="aside-dot" style="--dot:#7dd3fc"></span>NASA NeoWs</div>
+        <div class="aside-row"><span class="aside-dot" style="--dot:#7dd3fc"></span>NASA Exoplanet</div>
+        <div class="aside-row"><span class="aside-dot" style="--dot:#7dd3fc"></span>arXiv Astro-ph</div>
+        <div class="aside-row"><span class="aside-dot" style="--dot:#7dd3fc"></span>GCN Circulars</div>
+        <div class="aside-row"><span class="aside-dot" style="--dot:#7dd3fc"></span>CDS Aladin</div>
+      </div>
+
+      <div class="aside-box">
+        <div class="aside-title">部署与 CI</div>
+        <div class="aside-row"><span class="aside-dot" style="--dot:#c4b5fd"></span>Docker Compose</div>
+        <div class="aside-row"><span class="aside-dot" style="--dot:#c4b5fd"></span>GitHub Actions</div>
+        <div class="aside-row"><span class="aside-dot" style="--dot:#c4b5fd"></span>pre-commit</div>
+        <div class="aside-row"><span class="aside-dot" style="--dot:#c4b5fd"></span>ruff / ESLint / Prettier</div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="baseline">
+    基于 <em>Vue 3 + FastAPI</em> 的六层分层架构，
+    集成 <strong>Neo4j / Milvus / CLIP / AstroSage-8B / AstroLLaVA</strong>，
+    由 <em>自适应 RAG Agent</em> 编排多条检索与推理路径，
+    <strong>Docker Compose</strong> 一键部署。
+  </div>
+</div>
+
+<script>
+  // 导出透明 PNG
+  const btn = document.getElementById("download-btn");
+  const tipBox = document.getElementById("tip-box");
+  const tipBtn = document.getElementById("tip-btn");
+
+  tipBtn.addEventListener("click", () => tipBox.classList.toggle("show"));
+
+  btn.addEventListener("click", async () => {
+    btn.disabled = true;
+    btn.textContent = "⏳ 生成中...";
+    try {
+      const node = document.getElementById("capture-area");
+      const canvas = await html2canvas(node, {
+        backgroundColor: null,       // 关键：null = 透明
+        scale: 2,                    // 2 倍高清
+        useCORS: true,
+        logging: false
+      });
+      const link = document.createElement("a");
+      link.download = "architecture_transparent.png";
+      link.href = canvas.toDataURL("image/png");
+      link.click();
+      btn.textContent = "✓ 已下载";
+      setTimeout(() => { btn.textContent = "📥 导出透明 PNG"; btn.disabled = false; }, 1500);
+    } catch (err) {
+      console.error(err);
+      alert("导出失败：" + err.message);
+      btn.textContent = "📥 导出透明 PNG";
+      btn.disabled = false;
+    }
+  });
+</script>
+</body>
+</html>
