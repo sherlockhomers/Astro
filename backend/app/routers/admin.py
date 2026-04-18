@@ -71,3 +71,20 @@ def admin_rebuild_graph(svc: ServiceContainer = Depends(get_services)) -> dict:
         return {"ok": False, "message": "未配置 csv_root，请先设置数据源路径"}
     ok, message, task_id = svc.graph.build_graph(settings.csv_root, [], write_neo4j=False)
     return {"ok": ok, "message": message, "task_id": task_id}
+
+
+@router.post("/admin/rules/reload")
+def admin_reload_rules(svc: ServiceContainer = Depends(get_services)) -> dict:
+    # 事实护栏规则和查询扩展规则都从文件读，运营改完文件调这里就生效，不用重启
+    orchestrator = getattr(svc.qa, "_orchestrator", None)
+    fact_info = orchestrator.reload_fact_rules() if orchestrator else {"count": 0, "sources": []}
+    expansion_count = svc.retrieval.reload_expansion_rules() if hasattr(svc.retrieval, "reload_expansion_rules") else 0
+    # 顺便把 QA 缓存清一下，不然老问题还会返老答案
+    if hasattr(svc.qa, "_cache"):
+        svc.qa._cache.clear()
+    return {
+        "ok": True,
+        "fact_rules": fact_info,
+        "query_expansions": expansion_count,
+        "qa_cache_cleared": True,
+    }
