@@ -9,8 +9,10 @@ import {
   getAstroToolCatalog
 } from "../../api";
 
-// 大件异步加载，首次进"今晚看什么"时按需拉
+// 大件异步加载，首次进对应 tab 时按需拉
 const PlanetSchedule = defineAsyncComponent(() => import("../../components/PlanetSchedule.vue"));
+const MoonCalendar = defineAsyncComponent(() => import("../../components/MoonCalendar.vue"));
+const CoordSphere = defineAsyncComponent(() => import("../../components/CoordSphere.vue"));
 
 type ActiveTool = "moon" | "planet" | "coord";
 
@@ -124,6 +126,20 @@ async function runCoord() {
 
 function switchTool(t: ActiveTool) {
   activeTool.value = t;
+}
+
+// 点热门天体卡：把坐标填进输入框并自动转换一次
+function onPickFamousObject(payload: {
+  ra: number;
+  dec: number;
+  frame: "equatorial" | "ecliptic";
+  to: "equatorial" | "ecliptic";
+}) {
+  coordRa.value = payload.ra;
+  coordDec.value = payload.dec;
+  coordFrom.value = payload.frame;
+  coordTo.value = payload.to;
+  void runCoord();
 }
 </script>
 
@@ -285,6 +301,9 @@ function switchTool(t: ActiveTool) {
           <span class="moon-bar-label">亮度 {{ Math.round(Number(moonResult.illumination) * 100) }}%</span>
         </div>
       </div>
+
+      <!-- 月相日历 + 倒计时 + 未来三个月关键日期，给下面的空白区填上真东西 -->
+      <MoonCalendar :base-date="moonDate || undefined" class="moon-calendar-wrap" />
     </section>
 
     <!-- 坐标转换 -->
@@ -331,6 +350,18 @@ function switchTool(t: ActiveTool) {
         </div>
         <p class="result-summary">{{ coordResult.summary }}</p>
       </div>
+
+      <!-- 天球示意图 + 热门天体速查，补齐下方空白 -->
+      <CoordSphere
+        class="coord-sphere-wrap"
+        :input-ra="Number(coordRa)"
+        :input-dec="Number(coordDec)"
+        :input-frame="coordFrom"
+        :output-ra="coordResult ? Number((coordResult.output as any)?.ra) : undefined"
+        :output-dec="coordResult ? Number((coordResult.output as any)?.dec) : undefined"
+        :output-frame="coordResult ? ((coordResult.output as any)?.frame as 'equatorial' | 'ecliptic') : undefined"
+        @pick-object="onPickFamousObject"
+      />
     </section>
 
     <div class="tool-hint">
@@ -679,7 +710,9 @@ function switchTool(t: ActiveTool) {
   border-radius: 2px;
 }
 
-.planet-schedule-wrap {
+.planet-schedule-wrap,
+.moon-calendar-wrap,
+.coord-sphere-wrap {
   margin-top: 12px;
 }
 </style>
