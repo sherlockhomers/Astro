@@ -229,6 +229,10 @@ class AdaptiveAgentOrchestrator:
             )
             answer_text = self._apply_domain_fact_guards(question, answer_text)
             answer_text = self._validate_answer_relevance(question, analysis, answer_text)
+            # 疑问类型兜底：没有"美国""1969 年"这种答到点子上的要素就从 RAG 片段里提一句补上
+            answer_text = self._enforce_qtype_on_final(
+                question, answer_text, list(retrieval_bundle.get("rag_items", []))
+            )
 
         answer_text = self._cloud_enhance_if_needed(question, answer_text, retrieval_bundle, emit)
 
@@ -374,6 +378,19 @@ class AdaptiveAgentOrchestrator:
 
         return text
 
+    def _enforce_qtype_on_final(
+        self,
+        question: str,
+        answer: str,
+        rag_items: list[dict[str, Any]],
+    ) -> str:
+        # 给 run() 的尾部调用。比 _validate_answer_relevance 更宽容：
+        # 如果答案没答到点子上，尽量从 RAG 片段里揪出 lead 句补在前面，而不是整个换。
+        qtype = self._classify_question_type(question)
+        if qtype in ("general", "why", "how", "where"):
+            return answer
+        return self._enforce_qtype_format(question, answer, qtype, rag_items)
+
     @staticmethod
     def _extract_question_aspect(question: str) -> list[str]:
         """Extract the specific aspect the question is asking about."""
@@ -403,6 +420,132 @@ class AdaptiveAgentOrchestrator:
             return text
         guarded = self._fact_rules.match(question)
         return guarded or text
+
+    # ── 疑问代词类型识别 ────────────────────────────────────────────────────
+    # 本地小模型对"谁/何时/哪个"这类追问特定主体的问题，经常答成百科百科，
+    # 先识别疑问类型，再在 prompt 和校验阶段都盯着必须答出这个类型的元素。
+
+    @staticmethod
+    def _classify_question_type(question: str) -> str:
+        q = str(question or "").strip()
+        if not q:
+            return "general"
+        # 英文疑问词句首判断：前后补空格让模糊匹配更容易
+        padded = f" {q.lower()} "
+        # 谁 / 哪国 / 哪个国家 / 哪个人 / 是谁
+        if any(k in q for k in ["谁", "哪国", "哪个国家", "哪位", "是谁", "由谁"]) or \
+           any(k in padded for k in [" who ", " who's ", " whom "]):
+            return "who"
+        # 何时 / 什么时候 / 哪年 / 哪一年
+        if any(k in q for k in ["何时", "什么时候", "哪年", "哪一年", "哪个时候", "几月", "几号", "年代"]) or \
+           any(k in padded for k in [" when ", "what year", "what date"]):
+            return "when"
+        # 哪里 / 在哪 / 哪个地方
+        if any(k in q for k in ["哪里", "在哪", "哪个地方", "什么位置"]) or \
+           " where " in padded:
+            return "where"
+        # 多大 / 多远 / 多长 / 多少
+        if any(k in q for k in ["多大", "多远", "多长", "多重", "多高", "多深", "多宽", "多快", "多少",
+                                 "几个", "几颗", "几次"]) or \
+           any(k in padded for k in ["how many", "how much", "how far", "how big"]):
+            return "count"
+        # 为什么 / 为啥 / 原因
+        if any(k in q for k in ["为什么", "为啥", "为何", "原因", "为甚么"]) or \
+           " why " in padded:
+            return "why"
+        # 怎么 / 如何
+        if any(k in q for k in ["怎么", "如何", "怎样"]) or " how " in padded:
+            return "how"
+        return "general"
+
+    @staticmethod
+    def _qtype_instruction(qtype: str, target_lang: str) -> str:
+        if target_lang != "zh":
+            mapping = {
+                "who": "CRITICAL: This is a WHO question. Your first sentence MUST directly name the specific person, country, or organization. Do NOT start with background.",
+                "when": "CRITICAL: This is a WHEN question. Your first sentence MUST give the specific year (and date if known).",
+                "where": "CRITICAL: This is a WHERE question. Your first sentence MUST give the specific location.",
+                "count": "CRITICAL: This is a quantity question. Your first sentence MUST contain the specific number.",
+                "why": "CRITICAL: This is a WHY question. Your first sentence MUST state the primary cause in plain language.",
+                "how": "CRITICAL: This is a HOW question. Your first sentence MUST describe the core mechanism in one plain sentence.",
+            }
+        else:
+            mapping = {
+                "who": "【关键】这是一道『谁/哪个国家/哪个主体』的提问。第一句话必须直接点名回答【具体的人名、国家名、航天器或组织名】，不要先讲背景。禁止用『这是一个复杂的问题』这类开场。",
+                "when": "【关键】这是一道『何时/哪一年』的提问。第一句话必须直接给出【具体年份】，有明确日期就写日期。",
+                "where": "【关键】这是一道『在哪/哪里』的提问。第一句话必须直接点明【具体地点】。",
+                "count": "【关键】这是一道『多少/多大/多远』的提问。第一句话必须包含【具体数字或数值范围】。",
+                "why": "【关键】这是一道『为什么』的提问。第一句话必须用一句白话直接说出【主要原因】，再展开机制。",
+                "how": "【关键】这是一道『如何/怎么』的提问。第一句话必须用一句白话描述【核心机制】。",
+            }
+        return mapping.get(qtype, "")
+
+    # 简易启发式：答案开头 80 字内是否包含期望类型的要素
+    _COUNTRY_NAMES = (
+        "美国", "苏联", "俄罗斯", "中国", "印度", "日本", "以色列", "韩国", "朝鲜", "英国",
+        "法国", "德国", "意大利", "欧空局", "NASA", "JAXA", "CNSA", "ISRO", "Roscosmos", "ESA",
+    )
+
+    @classmethod
+    def _answer_has_expected_shape(cls, answer: str, qtype: str) -> bool:
+        text = str(answer or "").strip()
+        if not text:
+            return False
+        head = text[:120]  # 只检查开头，后面的背景扩展不算
+        if qtype == "who":
+            if any(c in head for c in cls._COUNTRY_NAMES):
+                return True
+            # 中文人名通常 2-4 个字，靠"阿波罗 11"等 mission name 也算
+            if re.search(r"阿波罗\s*\d+", head) or re.search(r"[A-Z][a-zA-Z]+\s+(Armstrong|Gagarin|Aldrin|Collins)", head):
+                return True
+            # 宽松：看是否包含"先/首次/第一"+主体词
+            if re.search(r"(?:宇航员|航天员|科学家|天文学家)", head):
+                return True
+            return False
+        if qtype == "when":
+            # 含 4 位年份 或 "xx 年"
+            if re.search(r"\b(19|20)\d{2}\b", head) or re.search(r"\d{3,4}\s*年", head):
+                return True
+            return False
+        if qtype == "count":
+            # 含数字（阿拉伯或中文）
+            if re.search(r"\d", head) or any(c in head for c in "一二三四五六七八九十百千万亿"):
+                return True
+            return False
+        return True  # why / how / general / where 不做硬校验
+
+    def _enforce_qtype_format(self, question: str, answer: str, qtype: str, rag_items: list[dict[str, Any]]) -> str:
+        # 答案头部没有预期要素时，兜底：从 RAG 片段里找线索拼一个 lead 句
+        text = str(answer or "").strip()
+        if not text or self._answer_has_expected_shape(text, qtype):
+            return text
+        lead = self._extract_lead_from_rag(qtype, rag_items)
+        if lead:
+            return f"{lead}\n\n{text}"
+        return text
+
+    def _extract_lead_from_rag(self, qtype: str, rag_items: list[dict[str, Any]]) -> str:
+        if qtype == "who":
+            for item in rag_items[:8]:
+                snippet = str(item.get("snippet", ""))
+                for country in self._COUNTRY_NAMES:
+                    if country in snippet:
+                        # 取包含这个词的句子
+                        for sent in re.split(r"[。！？；]", snippet):
+                            if country in sent and len(sent) < 140:
+                                return sent.strip() + "。"
+            return ""
+        if qtype == "when":
+            for item in rag_items[:8]:
+                snippet = str(item.get("snippet", ""))
+                m = re.search(r"((?:19|20)\d{2})\s*年(?:\s*\d{1,2}\s*月)?(?:\s*\d{1,2}\s*日)?", snippet)
+                if m:
+                    for sent in re.split(r"[。！？；]", snippet):
+                        if m.group(0) in sent and len(sent) < 160:
+                            return sent.strip() + "。"
+            return ""
+        return ""
+
 
     def _decide_strategy(
         self,
@@ -1150,12 +1293,18 @@ class AdaptiveAgentOrchestrator:
                 "Do not mention internal tools, routing, strategy, citations, or system status.\n"
             )
 
+        # 疑问类型强约束：让本地 LLM 知道第一句必须给出什么类型的主语
+        qtype = self._classify_question_type(question)
+        qtype_hint = self._qtype_instruction(qtype, target_lang)
+
         return (
             "You are a professional astronomy science communicator.\n"
             + style_req
+            + (qtype_hint + "\n" if qtype_hint else "")
             + "Keep the answer focused and fact-based.\n\n"
             + f"User question: {question}\n"
             + f"Intent: {analysis.get('intent', 'general')}\n"
+            + f"Question type: {qtype}\n"
             + f"Entities: {analysis.get('entities', [])}\n"
             + f"Session summary: {memory_summary[:300]}\n"
             + f"Strategy sources: {strategy.get('sources', [])}\n"

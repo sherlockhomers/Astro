@@ -60,6 +60,7 @@ jobs:
           pytest tests/test_fact_rules_loader.py \
                  tests/test_query_expansion.py \
                  tests/test_user_service.py \
+                 tests/test_question_type_classifier.py \
                  -q --disable-warnings
 
   # ─── Frontend: type-check + build ───────────────────────────────────────────
