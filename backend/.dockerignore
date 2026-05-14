@@ -35,7 +35,7 @@ tmp
 astrograph.db
 
 # 文档 / 演示资料
-README.md
+*.md
 
 # 测试产物
 tests/__pycache__

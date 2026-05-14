@@ -1,7 +1,7 @@
 [tool.ruff]
 line-length = 120
 target-version = "py311"
-extend-exclude = [".venv", ".venv_old_migrated", "alembic/versions", "vendor"]
+extend-exclude = [".venv", ".venv_old_migrated", "vendor"]
 
 [tool.ruff.lint]
 select = [
