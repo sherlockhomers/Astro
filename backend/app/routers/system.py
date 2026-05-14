@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException
 
@@ -15,9 +16,10 @@ from app.schemas import (
 
 router = APIRouter(tags=["system"])
 
-# adapter_path 是 Python 文件路径，加载就等于 import 执行，
-# 必须严格限制只能从 backend/models 目录下挑。
-_MODEL_ADAPTER_ROOT = Path(__file__).resolve().parents[3] / "models"
+# adapter_path 加载等同于 import 执行，必须严格限制路径。
+# system.py 位于 backend/app/routers/，parents[2] 才是 backend/，
+# 配合默认 settings.model_adapter_path="models/custom_model.py" 相对 backend/ 也对得上。
+_MODEL_ADAPTER_ROOT = Path(__file__).resolve().parents[2] / "models"
 
 
 def _validate_adapter_path(adapter_path: str | None) -> str | None:

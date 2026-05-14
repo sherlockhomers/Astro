@@ -1358,9 +1358,13 @@ class GraphService:
 
     # 写关键字一律拒。MATCH 开头并不够——MATCH (n) DETACH DELETE n 完全合法
     # 而且会清空整个图谱，所以需要在语句级别黑名单 + driver 层 read-only 双重保险。
+    # 词边界匹配防止误伤属性名（n.created_at / n.set_id / n.merge_key 等）。
     _CYPHER_WRITE_KEYWORDS = (
         "create", "delete", "detach", "set", "remove", "merge",
-        "drop", "load csv", "call apoc", "foreach",
+        "drop", "foreach",
+    )
+    _CYPHER_WRITE_PHRASES = (
+        "load csv", "call apoc",  # 多词短语本身就足够独特，普通字符串比对就行
     )
 
     def run_cypher(self, query: str, params: dict[str, Any]) -> tuple[bool, list[dict[str, Any]], str]:
@@ -1370,9 +1374,14 @@ class GraphService:
         normalized = query.strip().lower()
         if not normalized.startswith("match"):
             return False, [], "仅允许以 MATCH 开头的只读查询。"
-        for bad in self._CYPHER_WRITE_KEYWORDS:
-            if bad in normalized:
-                return False, [], f"检测到写关键字 '{bad}'，仅允许只读 Cypher。"
+
+        import re
+        for keyword in self._CYPHER_WRITE_KEYWORDS:
+            if re.search(rf"\b{keyword}\b", normalized):
+                return False, [], f"检测到写关键字 '{keyword}'，仅允许只读 Cypher。"
+        for phrase in self._CYPHER_WRITE_PHRASES:
+            if phrase in normalized:
+                return False, [], f"检测到写短语 '{phrase}'，仅允许只读 Cypher。"
 
         try:
             from neo4j import GraphDatabase
