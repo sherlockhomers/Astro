@@ -232,11 +232,18 @@ async def ask_question_stream_with_image(
         stream_queue: Queue[dict | None] = Queue()
         result_box: dict[str, object] = {}
 
+        def emit(stage: str, event_payload: dict | None = None) -> None:
+            data = {"stage": stage}
+            if isinstance(event_payload, dict):
+                data.update(event_payload)
+            stream_queue.put(data)
+
         def worker() -> None:
             try:
                 result_box["result"] = svc.qa.ask_with_image_detailed_with_timeout(
                     question=question, image_bytes=image_bytes, filename=filename,
                     session_id=sid, max_total_seconds=settings.qa_image_timeout_seconds,
+                    emit_stage=emit,
                 )
             except Exception as exc:
                 result_box["error"] = exc
@@ -262,22 +269,20 @@ async def ask_question_stream_with_image(
             if preview_text:
                 sent_preview = preview_text
                 yield _sse_event("delta", {"text": preview_text, "preview": True})
-            yield _sse_event("status", {"stage": "retrieval", "message": "正在检索相似图像和知识片段。"})
 
-        heartbeat = 0
         while True:
             try:
                 item = stream_queue.get(timeout=0.45)
             except Empty:
-                heartbeat += 1
                 if thread.is_alive():
-                    if heartbeat == 2:
-                        yield _sse_event("status", {"stage": "reasoning", "message": "正在整合图片识别结果并生成科普说明。"})
                     yield ": ping\n\n"
                     continue
                 item = None
             if item is None:
                 break
+            # ask_with_image_detailed 现在会把每个阶段 push 进 stream_queue
+            if isinstance(item, dict):
+                yield _sse_event("status", item)
 
         thread.join()
         error = result_box.get("error")

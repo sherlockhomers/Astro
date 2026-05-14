@@ -2,12 +2,26 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import re
 import sqlite3
+import threading
 import time
 from collections import OrderedDict
 from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeoutError
 from typing import Any
+
+logger = logging.getLogger("astrograph")
+
+
+class _QACancelledError(BaseException):
+    """Cooperative cancel signal.
+
+    继承 BaseException 而不是 Exception，避免 orchestrator / agent 内部
+    `except Exception` 把它静默吞掉。被 emit() 在 cancel_event 触发时抛出，
+    由 ask_detailed_with_timeout 顶层捕获并转换成 TimeoutError。
+    """
+    pass
 
 from app.config import settings
 from app.services import prompt_templates as tpl
@@ -94,10 +108,27 @@ class QAService:
         if timeout_sec <= 0:
             return self.ask_detailed(question, session_id, emit_stage=emit_stage)
 
-        future = self._executor.submit(self.ask_detailed, question, session_id, emit_stage)
+        # 协作式取消：超时时 set event，由 worker 在下一次 emit 时抛 _QACancelledError 自然退出。
+        # Future.cancel() 对已运行任务返回 False，单靠它无法真正中断 thread，所以加这一层。
+        cancel_event = threading.Event()
+
+        def cancelable_emit(stage: str, payload: dict | None = None) -> None:
+            if cancel_event.is_set():
+                raise _QACancelledError(f"QA pipeline cancelled at stage={stage}")
+            if emit_stage is not None:
+                try:
+                    emit_stage(stage, payload)
+                except _QACancelledError:
+                    raise
+                except Exception as exc:
+                    # 上游 emit 出错不应该让整条 pipeline 挂
+                    logger.debug("emit_stage callback failed (stage=%s): %s", stage, exc)
+
+        future = self._executor.submit(self.ask_detailed, question, session_id, cancelable_emit)
         try:
             return future.result(timeout=timeout_sec)
         except FuturesTimeoutError as exc:
+            cancel_event.set()
             future.cancel()
             raise TimeoutError(f"QA pipeline exceeded {timeout_sec:.1f}s") from exc
 
@@ -221,15 +252,33 @@ class QAService:
         filename: str,
         session_id: str | None = None,
         max_total_seconds: float | None = None,
+        emit_stage: Any | None = None,
     ) -> dict[str, Any]:
         timeout_sec = float(max_total_seconds or 0)
         if timeout_sec <= 0:
-            return self.ask_with_image_detailed(question, image_bytes, filename, session_id)
+            return self.ask_with_image_detailed(question, image_bytes, filename, session_id, emit_stage=emit_stage)
 
-        future = self._executor.submit(self.ask_with_image_detailed, question, image_bytes, filename, session_id)
+        # 同 ask_detailed_with_timeout：协作式取消
+        cancel_event = threading.Event()
+
+        def cancelable_emit(stage: str, payload: dict | None = None) -> None:
+            if cancel_event.is_set():
+                raise _QACancelledError(f"Image QA pipeline cancelled at stage={stage}")
+            if emit_stage is not None:
+                try:
+                    emit_stage(stage, payload)
+                except _QACancelledError:
+                    raise
+                except Exception as exc:
+                    logger.debug("image emit_stage callback failed (stage=%s): %s", stage, exc)
+
+        future = self._executor.submit(
+            self.ask_with_image_detailed, question, image_bytes, filename, session_id, cancelable_emit,
+        )
         try:
             return future.result(timeout=timeout_sec)
         except FuturesTimeoutError as exc:
+            cancel_event.set()
             future.cancel()
             raise TimeoutError(f"Image QA pipeline exceeded {timeout_sec:.1f}s") from exc
 
@@ -261,7 +310,9 @@ class QAService:
         image_bytes: bytes,
         filename: str,
         session_id: str | None = None,
+        emit_stage: Any | None = None,
     ) -> dict[str, Any]:
+        emit = emit_stage or (lambda _stage, _payload=None: None)
         started = time.perf_counter()
         sid = session_id or self._new_session_id()
         image_sha1 = hashlib.sha1(image_bytes).hexdigest()
@@ -269,6 +320,7 @@ class QAService:
         cache_key = self._make_cache_key(cache_probe_question)
         cached = self._get_cached_answer(cache_key, cache_probe_question)
         if cached is not None:
+            emit("cache", {"message": "命中历史缓存，正在返回上次结果。", "cache_hit": True})
             answer = str(cached.get("answer", "")).strip() or "\u6682\u65f6\u6ca1\u6709\u62ff\u5230\u7a33\u5b9a\u7ed3\u679c\uff0c\u8bf7\u6362\u4e00\u5f20\u66f4\u6e05\u6670\u7684\u56fe\u7247\u518d\u8bd5\u3002"
             citations = [str(x).strip() for x in cached.get("citations", []) if str(x).strip()]
             graph_path = list(cached.get("graph_path", []))
@@ -285,13 +337,17 @@ class QAService:
                 "cache": {"hit": True, "enabled": self._cache_enabled(), "stats": self.get_cache_stats()},
             }
 
+        emit("vision_predict", {"message": "正在用视觉模型识别图片主体。"})
         prediction = self._image_service.predict(filename, image_bytes) if self._image_service else {"ok": False}
+        emit("image_search", {"message": "正在检索相似天文图片作为佐证。"})
         image_payload = (
             self._image_service.search_by_image_bytes(image_bytes, page=1, page_size=3)
             if self._image_service
             else {"items": []}
         )
         focus_name = self._pick_image_focus(prediction, image_payload, question)
+        if focus_name:
+            emit("focus_locked", {"message": f"主体初步判断为：{focus_name}。", "focus_name": focus_name})
         analysis = {"intent": "image_qa", "entities": [focus_name] if focus_name else []}
         query_for_kb = self._build_image_grounded_query(question, focus_name, prediction)
         generic_identification = self._is_generic_image_identification_question(question)
@@ -315,6 +371,7 @@ class QAService:
             )
         )
         if need_kb_grounding:
+            emit("kb_grounding", {"message": "正在结合本地知识库补充科普说明。"})
             try:
                 retrieved, _ = self._retrieval_service.search(query_for_kb, top_k=3)
             except Exception:
@@ -367,6 +424,7 @@ class QAService:
         )
 
         if self._model_service.vision_ready and not allow_direct_grounded_answer:
+            emit("vision_reasoning", {"message": "视觉模型正在生成图文回答。"})
             ok, payload = self._model_service.answer_with_image(
                 question=question,
                 image_bytes=image_bytes,
@@ -386,6 +444,7 @@ class QAService:
                     model_citations = []
 
         if not model_answer and not allow_direct_grounded_answer and self._model_service.ready and (focus_name or rag_items):
+            emit("text_fallback", {"message": "视觉模型未输出有效答复，切换文本模型兜底。"})
             prompt = self._build_image_text_prompt(question, focus_name, prediction, image_payload, rag_items)
             ok, payload = self._call_model_with_timeout(
                 prompt,
@@ -407,6 +466,7 @@ class QAService:
         answer = model_answer or grounded_answer or "\u6211\u8fd8\u4e0d\u80fd\u7a33\u5b9a\u8bc6\u522b\u8fd9\u5f20\u56fe\u7247\u91cc\u7684\u5929\u4f53\u3002\u5efa\u8bae\u6362\u4e00\u5f20\u66f4\u6e05\u6670\u3001\u4e3b\u4f53\u66f4\u5c45\u4e2d\u7684\u56fe\u7247\u518d\u8bd5\u3002"
         citations = self._dedupe(model_citations + self._image_citations(image_payload))
         graph_path: list[dict[str, Any]] = []
+        emit("complete", {"message": "图片回答已生成。"})
 
         self._remember_turn(sid, question, answer)
         self._put_cached_answer(
