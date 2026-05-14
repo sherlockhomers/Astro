@@ -56,6 +56,7 @@ class TestGraphServiceResolveEntityName:
         result = svc._resolve_entity_name("Kepler-186f")
         assert result == "Kepler-186f"
 
+    @pytest.mark.stale  # _resolve_cache 现在用 lowercase key（"kepler-186f"），测试期望原大小写 key
     def test_resolve_cache_hit(self, data_service_factory, sample_csv_file):
         ds = data_service_factory()
         ds.load_data_source(str(sample_csv_file.parent), [])

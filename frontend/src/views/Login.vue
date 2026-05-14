@@ -13,6 +13,8 @@ const loading = ref(false);
 const errorMessage = ref("");
 const successMessage = ref("");
 
+// canSubmit 用 trim 只为屏蔽"全空格"无意义输入；
+// 实际登录调用故意不 trim 密码，避免把用户密码里有意义的前后空格洗掉。
 const canSubmit = computed(
   () => form.value.username.trim().length > 0 && form.value.password.trim().length > 0
 );
@@ -27,6 +29,7 @@ async function handleLogin() {
   errorMessage.value = "";
   successMessage.value = "";
   try {
+    // 用户名 trim 一下（前后空格基本是误输入），密码保留原文。
     const res = await login(form.value.username.trim(), form.value.password);
     if (res.ok) {
       successMessage.value = "Sign in success. Redirecting...";

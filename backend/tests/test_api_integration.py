@@ -1,8 +1,13 @@
-"""Integration tests for API endpoints using FastAPI TestClient."""
+"""Integration tests for API endpoints using FastAPI TestClient.
+
+这套测试会真正启动 FastAPI app（含 lifespan + 模型加载），
+CI 容器里通常跑不动，所以整文件统一打 integration marker。"""
 from __future__ import annotations
 
 import pytest
 from fastapi.testclient import TestClient
+
+pytestmark = pytest.mark.integration
 
 
 @pytest.fixture(scope="module")

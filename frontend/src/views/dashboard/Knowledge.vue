@@ -87,7 +87,10 @@ const compareSummary = computed(() => {
   return String(comparePayload.value.summary || "");
 });
 
-function sanitizeLine(text: string): string {
+// 注意：只做"去前后空白 + 过滤纯问号"的轻度归一化，**不是** XSS 防护。
+// 当前所有调用点都是文本插值，安全；如果未来谁要把这些字段塞进 v-html，
+// 请先接入 DOMPurify。命名特意叫 normalize 避免别人误以为这里挡 XSS。
+function normalizeLine(text: string): string {
   const t = String(text || "").trim();
   if (!t) return "";
   if (/^\?+$/.test(t)) return "";
@@ -124,10 +127,10 @@ async function runKnowledgeSearch() {
     const items = Array.isArray(payload?.items) ? payload.items : [];
     searchResults.value = items
       .map((x: any) => ({
-        title: sanitizeLine(String(x?.title || "")),
+        title: normalizeLine(String(x?.title || "")),
         score: Number(x?.score || 0),
-        snippet: sanitizeLine(String(x?.snippet || "")),
-        source: sanitizeLine(String(x?.source || ""))
+        snippet: normalizeLine(String(x?.snippet || "")),
+        source: normalizeLine(String(x?.source || ""))
       }))
       .filter((x: KnowledgeItem) => x.title || x.snippet);
   } catch {

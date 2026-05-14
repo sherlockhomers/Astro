@@ -159,6 +159,15 @@ async def lifespan(app: FastAPI):
     except Exception as exc:
         logger.warning("Error during SQLite shutdown: %s", exc)
 
+    # 释放 QA pipeline 的内部线程池，避免 uvicorn 退出时挂在 daemon 线程上
+    try:
+        executor = getattr(_container.qa, "_executor", None) if _container else None
+        if executor is not None:
+            executor.shutdown(wait=False, cancel_futures=True)
+            logger.info("QA executor shutdown signalled")
+    except Exception as exc:
+        logger.warning("Error during QA executor shutdown: %s", exc)
+
 
 def get_services(request: Request) -> ServiceContainer:
     return request.app.state.services

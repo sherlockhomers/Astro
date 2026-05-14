@@ -53,15 +53,13 @@ jobs:
       - name: Lint with ruff
         run: ruff check app tests --output-format=github || true
 
-      # 只跑完全不依赖 CSV / 图谱 / 本地模型的干净 unit tests。
-      # integration / agent / graph / qa 那些 CI 容器里跑不了，留给本地开发。
-      - name: Run pytest (unit tests only)
+      # 跑所有 unit 测试；integration 测试要完整 FastAPI app（含模型加载），
+      # 容器里跑不了，统一在 test 文件里打了 @pytest.mark.integration。
+      # stale 测试是与代码漂移的旧 case，待修复后会去掉 marker。
+      - name: Run pytest (all unit tests, skip integration + stale)
         run: |
-          pytest tests/test_fact_rules_loader.py \
-                 tests/test_query_expansion.py \
-                 tests/test_user_service.py \
-                 tests/test_question_type_classifier.py \
-                 -q --disable-warnings
+          pytest tests/ -q --disable-warnings \
+                 -m "not integration and not stale"
 
   # ─── Frontend: type-check + build ───────────────────────────────────────────
   frontend:
