@@ -1,10 +1,9 @@
 from __future__ import annotations
 
-from collections import defaultdict
 from datetime import datetime, timezone
-from typing import Any
+from pathlib import Path
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 
 from app.config import settings
 from app.deps import ServiceContainer, get_services, require_internal
@@ -15,6 +14,30 @@ from app.schemas import (
 )
 
 router = APIRouter(tags=["system"])
+
+# adapter_path 是 Python 文件路径，加载就等于 import 执行，
+# 必须严格限制只能从 backend/models 目录下挑。
+_MODEL_ADAPTER_ROOT = Path(__file__).resolve().parents[3] / "models"
+
+
+def _validate_adapter_path(adapter_path: str | None) -> str | None:
+    if not adapter_path:
+        return None
+    candidate = Path(adapter_path)
+    if not candidate.is_absolute():
+        candidate = (_MODEL_ADAPTER_ROOT / candidate).resolve()
+    else:
+        candidate = candidate.resolve()
+    try:
+        candidate.relative_to(_MODEL_ADAPTER_ROOT.resolve())
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=400,
+            detail=f"adapter_path 必须位于 {_MODEL_ADAPTER_ROOT} 下",
+        ) from exc
+    if candidate.suffix.lower() != ".py":
+        raise HTTPException(status_code=400, detail="adapter_path 必须是 .py 文件")
+    return str(candidate)
 
 
 @router.get("/health", response_model=HealthResponse)
@@ -58,9 +81,11 @@ def model_status(svc: ServiceContainer = Depends(get_services)) -> ModelStatusRe
     return ModelStatusResponse(**svc.model.get_status())
 
 
-@router.post("/api/v1/model/load", response_model=ModelLoadResponse)
+# 模型重加载会重新 import 任意 Python 文件，等同于在服务器上执行代码，必须内部令牌 + 路径白名单
+@router.post("/api/v1/model/load", response_model=ModelLoadResponse, dependencies=[Depends(require_internal)])
 def model_load(payload: ModelLoadRequest, svc: ServiceContainer = Depends(get_services)) -> ModelLoadResponse:
-    ok, message = svc.model.load(payload.adapter_path, payload.class_name)
+    safe_adapter_path = _validate_adapter_path(payload.adapter_path)
+    ok, message = svc.model.load(safe_adapter_path, payload.class_name)
     status = ModelStatusResponse(**svc.model.get_status())
     return ModelLoadResponse(ok=ok, message=message, status=status)
 

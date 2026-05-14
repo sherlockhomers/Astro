@@ -7,8 +7,9 @@ from fastapi.responses import FileResponse, RedirectResponse
 from pydantic import BaseModel, Field
 
 from app.config import settings
-from app.deps import ServiceContainer, get_services, optional_user
+from app.deps import ServiceContainer, get_services, require_internal
 from app.routers._helpers import ensure_gallery_images, normalize_milvus_status, image_placeholder_svg
+from app.routers._upload_limits import enforce_image_size
 
 
 class IndexTriggerRequest(BaseModel):
@@ -19,9 +20,11 @@ router = APIRouter(prefix="/api/v1/image", tags=["image"])
 IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp"}
 
 
-@router.post("/predict")
+# 直接对外的图像预测入口会触发 GPU / 模型推理，匿名调用容易被刷成本。
+# 暂时收紧成内部令牌，前端走 /search-by-image 已经足够覆盖演示需求。
+@router.post("/predict", dependencies=[Depends(require_internal)])
 async def image_predict(file: UploadFile = File(...), svc: ServiceContainer = Depends(get_services)) -> dict:
-    image_bytes = await file.read()
+    image_bytes = await enforce_image_size(file)
     return svc.image.predict(file.filename, image_bytes)
 
 
@@ -30,7 +33,7 @@ async def image_search_by_image(
     file: UploadFile = File(...), page: int = 1, page_size: int = 12, top_k: int | None = None,
     svc: ServiceContainer = Depends(get_services),
 ) -> dict:
-    image_bytes = await file.read()
+    image_bytes = await enforce_image_size(file)
     if top_k is not None and top_k > 0:
         page_size = min(int(top_k), 48)
         page = 1
@@ -86,12 +89,12 @@ def image_index_status(svc: ServiceContainer = Depends(get_services)) -> dict:
     return normalize_milvus_status(status, quick_connected, quick_vectors)
 
 
-@router.post("/index-trigger")
+# 索引重建会拉满 CLIP + Milvus，必须内部令牌；之前用 optional_user 等于无防护
+@router.post("/index-trigger", dependencies=[Depends(require_internal)])
 def image_index_trigger(
     payload: IndexTriggerRequest | None = None,
     force: bool | None = None,
     svc: ServiceContainer = Depends(get_services),
-    _user: dict | None = Depends(optional_user),
 ) -> dict:
     # 新客户端用 body，老客户端还在用 ?force=... 的 query 参数，两个都收
     effective_force = bool(payload.force) if payload is not None else bool(force)

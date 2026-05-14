@@ -12,6 +12,7 @@ from fastapi.responses import StreamingResponse
 
 from app.config import settings
 from app.deps import ServiceContainer, extract_token, get_services, optional_user, require_internal
+from app.routers._upload_limits import enforce_image_size
 from app.schemas import AskRequest, AskResponse, EvaluationReportResponse, EvaluationRunRequest, QADiagnosticsResponse
 
 router = APIRouter(prefix="/api/v1", tags=["qa"])
@@ -221,7 +222,7 @@ async def ask_question_stream_with_image(
     authorization: str | None = Header(default=None),
     svc: ServiceContainer = Depends(get_services),
 ):
-    image_bytes = await file.read()
+    image_bytes = await enforce_image_size(file)
     filename = file.filename or "upload.png"
     sid = session_id or uuid.uuid4().hex[:12]
     token = extract_token(authorization)
@@ -322,7 +323,7 @@ async def ask_with_image(
     user: dict | None = Depends(optional_user),
     svc: ServiceContainer = Depends(get_services),
 ) -> AskResponse:
-    image_bytes = await file.read()
+    image_bytes = await enforce_image_size(file)
     filename = file.filename or "upload.png"
     sid = session_id or uuid.uuid4().hex[:12]
     try:

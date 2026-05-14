@@ -1,19 +1,22 @@
 from __future__ import annotations
 
-from collections import defaultdict
 from datetime import datetime
 
-from fastapi import APIRouter, Depends, Header
+from fastapi import APIRouter, Depends
 
 from app.config import settings
 from app.deps import ServiceContainer, get_services, require_internal
 
-router = APIRouter(prefix="/api/v1", tags=["admin"])
+# 整组管理路由统一要求 X-Internal-Token，避免单个端点忘加导致裸奔
+router = APIRouter(
+    prefix="/api/v1",
+    tags=["admin"],
+    dependencies=[Depends(require_internal)],
+)
 
 
 @router.get("/metrics")
 def metrics(
-    _: None = Depends(require_internal),
     svc: ServiceContainer = Depends(get_services),
 ) -> dict:
     return {"message": "metrics available via /metrics endpoint"}

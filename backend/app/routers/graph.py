@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException
 
-from app.deps import ServiceContainer, get_services
+from app.deps import ServiceContainer, get_services, require_internal
 from app.schemas import (
     BuildGraphRequest, BuildGraphResponse, CypherQueryRequest, CypherQueryResponse,
     GraphExportCypherRequest, GraphExportCypherResponse, GraphMultiPathQueryResponse,
@@ -17,7 +17,8 @@ def graphrag_query(payload: GraphRAGQueryRequest, svc: ServiceContainer = Depend
     return GraphRAGQueryResponse(**svc.graphrag.query(payload.question))
 
 
-@router.post("/graph/build", response_model=BuildGraphResponse)
+# 图谱重建 = 大量 CPU/IO，需要内部令牌
+@router.post("/graph/build", response_model=BuildGraphResponse, dependencies=[Depends(require_internal)])
 def build_graph(payload: BuildGraphRequest, svc: ServiceContainer = Depends(get_services)) -> BuildGraphResponse:
     try:
         accepted, message, task_id = svc.graph.build_graph(payload.csv_root, payload.categories, payload.write_neo4j)
@@ -26,7 +27,8 @@ def build_graph(payload: BuildGraphRequest, svc: ServiceContainer = Depends(get_
     return BuildGraphResponse(accepted=accepted, message=message, task_id=task_id)
 
 
-@router.post("/graph/export-cypher", response_model=GraphExportCypherResponse)
+# 导出 Cypher 文件涉及写本地文件系统，允许用户指定 output_path 会变成任意文件写
+@router.post("/graph/export-cypher", response_model=GraphExportCypherResponse, dependencies=[Depends(require_internal)])
 def graph_export_cypher(payload: GraphExportCypherRequest, svc: ServiceContainer = Depends(get_services)) -> GraphExportCypherResponse:
     ok, node_count, relation_count, message = svc.graph.export_cypher(payload.output_path)
     return GraphExportCypherResponse(ok=ok, output_path=payload.output_path, node_count=node_count, relation_count=relation_count, message=message)
@@ -63,7 +65,10 @@ def graph_multi_path_between(source: str, target: str, max_hops: int = 4, max_pa
     return GraphMultiPathQueryResponse(found=True, paths=paths, message="ok")
 
 
-@router.post("/graph/cypher", response_model=CypherQueryResponse)
+# 直接对外暴露 Cypher 接口本身就是高风险（即便强制 MATCH 开头，
+# 也可能写出 MATCH (n) DETACH DELETE n 这类破坏性语句）。
+# 这里同时要求内部令牌，并由 graph_service.run_cypher 内部禁掉写关键字。
+@router.post("/graph/cypher", response_model=CypherQueryResponse, dependencies=[Depends(require_internal)])
 def graph_cypher(payload: CypherQueryRequest, svc: ServiceContainer = Depends(get_services)) -> CypherQueryResponse:
     ok, records, message = svc.graph.run_cypher(payload.query, payload.params)
     return CypherQueryResponse(ok=ok, records=records, message=message)

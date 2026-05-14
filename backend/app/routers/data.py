@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException
 
-from app.deps import ServiceContainer, get_services
+from app.deps import ServiceContainer, get_services, require_internal
 from app.schemas import (
     DataLoadRequest, DataLoadResponse, DataScanRequest, DataScanResponse,
     SearchRequest, SearchResponse, TextIngestClearResponse, TextIngestRequest, TextIngestResponse,
@@ -13,7 +13,9 @@ from app.routers._helpers import ensure_gallery_images
 router = APIRouter(prefix="/api/v1", tags=["data"])
 
 
-@router.post("/data/scan", response_model=DataScanResponse)
+# 数据源扫描/加载/语料导入这类接口允许用户提交任意服务器路径，
+# 一旦裸奔就是任意路径读取 + 任意目录扫描，必须强制内部令牌。
+@router.post("/data/scan", response_model=DataScanResponse, dependencies=[Depends(require_internal)])
 def data_scan(payload: DataScanRequest, svc: ServiceContainer = Depends(get_services)) -> DataScanResponse:
     try:
         files = svc.data.scan_data_source(payload.csv_root)
@@ -22,7 +24,7 @@ def data_scan(payload: DataScanRequest, svc: ServiceContainer = Depends(get_serv
     return DataScanResponse(files=files, total_files=len(files))
 
 
-@router.post("/data/load", response_model=DataLoadResponse)
+@router.post("/data/load", response_model=DataLoadResponse, dependencies=[Depends(require_internal)])
 def data_load(payload: DataLoadRequest, svc: ServiceContainer = Depends(get_services)) -> DataLoadResponse:
     try:
         result = svc.data.load_data_source(payload.csv_root, payload.categories)
@@ -31,7 +33,7 @@ def data_load(payload: DataLoadRequest, svc: ServiceContainer = Depends(get_serv
     return DataLoadResponse(**result)
 
 
-@router.post("/data/ingest-text", response_model=TextIngestResponse)
+@router.post("/data/ingest-text", response_model=TextIngestResponse, dependencies=[Depends(require_internal)])
 def data_ingest_text(payload: TextIngestRequest, svc: ServiceContainer = Depends(get_services)) -> TextIngestResponse:
     try:
         result = svc.data.ingest_text_corpus(
@@ -45,7 +47,7 @@ def data_ingest_text(payload: TextIngestRequest, svc: ServiceContainer = Depends
     return TextIngestResponse(**result)
 
 
-@router.post("/data/ingest-text/clear", response_model=TextIngestClearResponse)
+@router.post("/data/ingest-text/clear", response_model=TextIngestClearResponse, dependencies=[Depends(require_internal)])
 def data_ingest_text_clear(svc: ServiceContainer = Depends(get_services)) -> TextIngestClearResponse:
     return TextIngestClearResponse(**svc.data.clear_text_corpus())
 
