@@ -1,0 +1,50 @@
+# Secrets / 本地配置
+.env
+.env.*
+!.env.example
+
+# Git / IDE / OS
+.git
+.gitignore
+.github
+.cursor
+.vscode
+.idea
+
+# Python 缓存与虚拟环境
+__pycache__
+*.pyc
+*.pyo
+.pytest_cache
+.ruff_cache
+.mypy_cache
+.venv
+.venv_old_migrated
+venv
+build
+dist
+*.egg-info
+
+# 本地运行时（极其重要：不要把 91MB 的真实 sqlite 数据库打进镜像）
+logs
+tmp
+*.log
+*.db
+*.db-shm
+*.db-wal
+astrograph.db
+
+# 文档 / 演示资料
+README.md
+
+# 测试产物
+tests/__pycache__
+.coverage
+coverage.xml
+htmlcov
+
+# AstroLLaVA 等大体积 vendor（容器跑不动 GPU 模型，需要的时候挂卷或显式 COPY）
+vendor
+
+# 离线数据（容器内一般通过卷挂载）
+data/text_corpus

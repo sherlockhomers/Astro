@@ -1,0 +1,30 @@
+# Secrets / 本地配置
+.env
+.env.*
+!.env.example
+
+# Git / IDE / OS
+.git
+.gitignore
+.github
+.cursor
+.vscode
+.idea
+
+# Node 缓存与构建产物（npm ci + npm run build 会重新生成）
+node_modules
+dist
+.vite
+.cache
+
+# 日志
+logs
+*.log
+dev.out.log
+dev.err.log
+frontend.log
+frontend.err.log
+
+# 其它
+.eslintcache
+coverage

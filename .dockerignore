@@ -1,0 +1,72 @@
+# 默认排除一切容易把 secrets / 实际数据 / 缓存打进镜像的东西。
+# 注意：backend 和 frontend 各自的 Dockerfile 都基于自己的子目录构建上下文，
+# 因此用 ** 通配以覆盖任意层级。
+
+# secrets / 本地配置
+**/.env
+**/.env.*
+!**/.env.example
+!**/.env.prod.example
+
+# Git / IDE / OS 元数据
+**/.git
+**/.gitignore
+**/.github
+**/.cursor
+**/.vscode
+**/.idea
+**/.DS_Store
+**/Thumbs.db
+
+# Python 工程产物
+**/__pycache__
+**/*.pyc
+**/*.pyo
+**/.pytest_cache
+**/.ruff_cache
+**/.mypy_cache
+**/.venv
+**/.venv_old_migrated
+**/venv
+**/env
+**/build
+**/dist
+**/*.egg-info
+
+# Node 工程产物
+**/node_modules
+**/dist
+**/.vite
+
+# 运行时数据 / 日志 / 临时
+**/logs
+**/tmp
+**/*.log
+**/*.db
+**/*.db-shm
+**/*.db-wal
+
+# 大体积本地资料（演示 PPT、原始数据、模型权重等），需要时显式 COPY
+**/models
+**/data/*.xlsx
+**/data/text_corpus
+**/vendor
+
+# 文档与素材（容器里跑不用，节省镜像体积）
+docs
+assets
+ppt_content.txt
+*.pptx
+*.docx
+*.xlsx
+README.md
+LICENSE
+
+# 本地实验脚本（容器里也不需要）
+scripts
+
+# 测试相关产物
+**/tests/__pycache__
+**/coverage.xml
+**/.coverage
+**/htmlcov

@@ -1,13 +1,16 @@
+# 端口都显式绑到 127.0.0.1，避免在公网服务器上一启动就把
+# Neo4j / MinIO / Milvus / Redis 直接暴露给互联网。
+# 密码相关的 env 不再给 fallback 默认值 —— 没设置就让容器启动失败，
+# 防止有人裸跑 docker compose up 一夜被脱裤。
 services:
   neo4j:
     image: neo4j:5
     container_name: astro-neo4j
     ports:
-      - "7474:7474"
-      - "7687:7687"
+      - "127.0.0.1:7474:7474"
+      - "127.0.0.1:7687:7687"
     environment:
-      # 本地开发够用就行，上生产请在 .env 里覆盖 NEO4J_PASSWORD
-      NEO4J_AUTH: neo4j/${NEO4J_PASSWORD:-dev_only_change_me_32_chars}
+      NEO4J_AUTH: neo4j/${NEO4J_PASSWORD:?NEO4J_PASSWORD must be set in .env}
     volumes:
       - neo4j_data:/data
 
@@ -16,11 +19,11 @@ services:
     container_name: astro-minio
     command: server /data --console-address ":9001"
     environment:
-      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
-      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-dev_only_change_me}
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:?MINIO_ROOT_USER must be set in .env}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?MINIO_ROOT_PASSWORD must be set in .env}
     ports:
-      - "9000:9000"
-      - "9001:9001"
+      - "127.0.0.1:9000:9000"
+      - "127.0.0.1:9001:9001"
     volumes:
       - minio_data:/data
 
@@ -29,8 +32,8 @@ services:
     container_name: astro-milvus
     command: ["milvus", "run", "standalone"]
     ports:
-      - "19530:19530"
-      - "9091:9091"
+      - "127.0.0.1:19530:19530"
+      - "127.0.0.1:9091:9091"
     environment:
       ETCD_USE_EMBED: "true"
       COMMON_STORAGETYPE: local
@@ -41,8 +44,9 @@ services:
     image: redis:7
     container_name: astro-redis
     ports:
-      - "6379:6379"
-    command: ["redis-server", "--appendonly", "yes"]
+      - "127.0.0.1:6379:6379"
+    # Redis 强制要求密码，避免经典 Redis 未授权 → RCE 链
+    command: ["redis-server", "--appendonly", "yes", "--requirepass", "${REDIS_PASSWORD:?REDIS_PASSWORD must be set in .env}"]
     volumes:
       - redis_data:/data
 
