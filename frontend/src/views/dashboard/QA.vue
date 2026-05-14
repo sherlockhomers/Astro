@@ -3,12 +3,26 @@ import { ElMessage } from "element-plus";
 import { defineAsyncComponent, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { marked } from "marked";
+import DOMPurify from "dompurify";
 import { getExploreBundle, saveFavorite, deleteFavorite, streamQuestion, streamQuestionWithImage } from "../../api";
 import { Star, Plus, Copy, RefreshCw, Pencil, Check, X, Download } from "lucide-vue-next";
 
 const GraphChart = defineAsyncComponent(() => import("../../components/GraphChart.vue"));
 
 marked.setOptions({ gfm: true, breaks: true });
+
+// 模型回答会被 marked 渲染成 HTML 再用 v-html 注入，
+// 一旦回答里出现 `<img src=x onerror=...>` 这种就是 XSS。
+// 这里统一过一遍 DOMPurify，profile 用默认 HTML（含 SVG/MathML 关掉）。
+const SAFE_HTML_CONFIG = {
+  USE_PROFILES: { html: true },
+  FORBID_TAGS: ["script", "style", "iframe", "object", "embed", "form"],
+  FORBID_ATTR: ["onerror", "onload", "onclick", "onmouseover", "onfocus"],
+} as const;
+
+function sanitizeMarkdownHtml(html: string): string {
+  return DOMPurify.sanitize(html, SAFE_HTML_CONFIG) as unknown as string;
+}
 
 type ConfidenceLevel = "high" | "medium" | "low";
 
@@ -121,7 +135,7 @@ const knownTopics = ["黑洞", "银河系", "仙女座星系", "木星", "土星
 function renderMarkdown(text: string) {
   const raw = String(text || "").trim();
   if (!raw) return "";
-  return String(marked.parse(raw));
+  return sanitizeMarkdownHtml(String(marked.parse(raw)));
 }
 
 function updateMessageRender(message: ChatMessage) {
